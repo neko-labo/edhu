@@ -122,6 +122,19 @@ function App() {
         if (!l.visible) return;
         const c = lcs.current[`${prev.id}_${l.id}`]; if (c) ctx.drawImage(c, 0, 0);
       });
+      if (prev.objects && prev.objects.length > 0) {
+        prev.objects.forEach(obj => {
+          const mat = materials.find(m => m.id === obj.materialId);
+          if (!mat) return;
+          const img = imgCache.current[mat.id];
+          if (!img || !img.complete) return;
+          ctx.save();
+          ctx.translate(obj.x, obj.y);
+          ctx.rotate((obj.rotation || 0) * Math.PI / 180);
+          ctx.drawImage(img, -mat.w/2, -mat.h/2, mat.w, mat.h);
+          ctx.restore();
+        });
+      }
       ctx.globalAlpha = 1;
     }
     frame.layers.forEach(l => {
