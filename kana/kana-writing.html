@@ -266,6 +266,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
     <!-- 書き順番号トグル -->
     <div class="btn-row" id="numtoggle-row" style="display:none">
       <button class="spd-btn sel" id="btn-numtoggle" onclick="toggleStrokeNum()">🔢 書き順をひょうじ</button>
+      <button class="spd-btn sel" id="btn-guidetoggle" onclick="toggleGuideHighlight()">✨ なぞりガイド</button>
     </div>
 
   </div>
@@ -361,6 +362,7 @@ let seqIdx = 0;
 let curChar = '';
 let charData = null;
 let mode = 'anim';   // 'anim'|'trace'
+let guideHighlightOn = true;  // なぞりガイド（現在の画だけ強調）のオン/オフ
 let animRaf = null;
 let traceDrawing = false;
 let traceMarked = false;
@@ -382,7 +384,7 @@ window.addEventListener('load', () => {
   buildCharGrid(ROWS.h.find(r=>r.key==='a').chars);
   loadChar('あ', seqAll.indexOf('あ'), { skipAutoplay: true });
 });
-window.addEventListener('resize', () => { calcSize(); if(charData) redrawGuide(mode==='trace' ? curTraceStroke : undefined); });
+window.addEventListener('resize', () => { calcSize(); if(charData) redrawGuide(mode==='trace' && guideHighlightOn ? curTraceStroke : undefined); });
 
 function calcSize() {
   const isMobile = window.innerWidth <= 700;
@@ -975,7 +977,15 @@ function toggleStrokeNum() {
   const btn = document.getElementById('btn-numtoggle');
   btn.classList.toggle('sel', showStrokeNum);
   btn.textContent = showStrokeNum ? '🔢 書き順をひょうじ' : '🔢 書き順をかくす';
-  if(charData) redrawGuide(mode==='trace' ? curTraceStroke : undefined);
+  if(charData) redrawGuide(mode==='trace' ? (guideHighlightOn ? curTraceStroke : undefined) : undefined);
+}
+
+function toggleGuideHighlight() {
+  guideHighlightOn = !guideHighlightOn;
+  const btn = document.getElementById('btn-guidetoggle');
+  btn.classList.toggle('sel', guideHighlightOn);
+  btn.textContent = guideHighlightOn ? '✨ なぞりガイド' : '✨ ガイドなし';
+  if(charData) redrawGuide(mode==='trace' ? (guideHighlightOn ? curTraceStroke : undefined) : undefined);
 }
 
 // ============================================================
@@ -987,7 +997,7 @@ function setupTrace() {
   if(!charData) return;
   const strokeList = groupStrokes(charData);
   curTraceStroke = 0;
-  redrawGuide(curTraceStroke); // 最初の画をハイライト
+  redrawGuide(guideHighlightOn ? curTraceStroke : undefined);
 
   const cv = document.getElementById('cv-trace');
   const ctx = cv.getContext('2d');
@@ -1017,6 +1027,7 @@ function setupTrace() {
   cv.onpointerup = cv.onpointercancel = () => {
     if(!traceDrawing) return;
     traceDrawing = false;
+    if(!guideHighlightOn) return;
     if(curTraceStroke < strokeList.length) curTraceStroke++;
     redrawGuide(curTraceStroke);
     if(curTraceStroke >= strokeList.length) {
@@ -1037,7 +1048,7 @@ function clearTrace() {
   clearCanvas('cv-trace');
   traceMarked = false;
   curTraceStroke = 0;
-  redrawGuide(curTraceStroke);
+  redrawGuide(guideHighlightOn ? curTraceStroke : undefined);
   document.getElementById('score-msg').textContent = '';
 }
 
