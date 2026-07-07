@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ねこラボ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;min-height:100%;}
+  body{
+    font-family:'Zen Maru Gothic', sans-serif;
+    color:#1a1a1a;
+    background:#ffffff;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 20px;
+  }
+
+  .stage{
+    max-width:420px;
+    width:100%;
+    text-align:center;
+  }
+
+  .mark{
+    width:56px;height:56px;
+    margin:0 auto 22px;
+  }
+
+  h1{
+    font-family:'Kosugi Maru', sans-serif;
+    font-size:clamp(26px,6vw,34px);
+    margin:0 0 8px;
+    letter-spacing:1px;
+  }
+
+  .lead{
+    font-size:13.5px;
+    color:#777;
+    margin:0 0 52px;
+    letter-spacing:.5px;
+  }
+
+  .door{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    text-decoration:none;
+    color:#1a1a1a;
+    padding:20px 24px;
+    border:1.5px solid #1a1a1a;
+    border-radius:14px;
+    transition:background .15s ease, color .15s ease;
+  }
+  .door:hover{
+    background:#1a1a1a;
+    color:#fff;
+  }
+  .door:hover .door-icon{ filter:invert(1); }
+  .door:focus-visible{ outline:2px solid #1a1a1a; outline-offset:3px; }
+
+  .door-icon{
+    width:26px;height:26px;
+    flex-shrink:0;
+  }
+
+  .door-text{ text-align:left; }
+  .door h2{
+    font-family:'Kosugi Maru', sans-serif;
+    font-size:16px;
+    margin:0 0 2px;
+  }
+  .door p{
+    font-size:11.5px;
+    opacity:.6;
+    margin:0;
+  }
+
+  footer{
+    margin-top:48px;
+    font-size:11px;
+    color:#999;
+    letter-spacing:.5px;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <svg class="mark" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="50" cy="58" rx="30" ry="26" stroke="#1a1a1a" stroke-width="3"/>
+      <path d="M26 38 L20 14 L44 30" stroke="#1a1a1a" stroke-width="3" stroke-linejoin="round" fill="none"/>
+      <path d="M74 38 L80 14 L56 30" stroke="#1a1a1a" stroke-width="3" stroke-linejoin="round" fill="none"/>
+      <circle cx="38" cy="55" r="2.6" fill="#1a1a1a"/>
+      <circle cx="62" cy="55" r="2.6" fill="#1a1a1a"/>
+      <path d="M46 64 Q50 68 54 64" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+    </svg>
+
+    <h1>ねこラボ</h1>
+    <p class="lead">すきなお部屋をえらんでね</p>
+
+    <a class="door" href="./learning-apps/">
+      <svg class="door-icon" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="1.6">
+        <path d="M4 4h7v16H4z"/>
+        <path d="M13 4h7v16h-7z"/>
+        <path d="M11 4v16" opacity="0"/>
+      </svg>
+      <div class="door-text">
+        <h2>きょういく</h2>
+        <p>まなびのツールブック</p>
+      </div>
+    </a>
+
+    <footer>neko-labo</footer>
+  </div>
+</body>
+</html>
