@@ -76,7 +76,14 @@ function App() {
   const drg = useRef(false);
   const lxy = useRef(null);
   const selStart = useRef(null);
-  const undoMap = useRef({});
+  const undoStacks = useRef({});
+  const pushUndo = (frameId, layerId) => {
+    const key = `${frameId}_${layerId}`;
+    const snap = glc(frameId, layerId).getContext('2d').getImageData(0, 0, CW, CH);
+    if (!undoStacks.current[key]) undoStacks.current[key] = [];
+    undoStacks.current[key].push(snap);
+    if (undoStacks.current[key].length > 25) undoStacks.current[key].shift();
+  };
   const pt = useRef(null);
   const imgCache = useRef({});
 
@@ -261,7 +268,9 @@ function App() {
     const frame = FR.current[FI.current]; if (!frame) return;
     const layer = frame.layers[LI.current]; if (!layer) return;
     const k = `${frame.id}_${layer.id}`;
-    const snap = undoMap.current[k]; if (!snap) return;
+    const stack = undoStacks.current[k];
+    if (!stack || stack.length === 0) return;
+    const snap = stack.pop();
     glc(frame.id, layer.id).getContext('2d').putImageData(snap, 0, 0);
     rerender(); mkThumb(frame);
   }, [glc, rerender, mkThumb]);
@@ -354,7 +363,7 @@ function App() {
       const [fr, fg, fb] = hexRgb(CR.current);
       floodFill(after.data, CW, CH, pos.x, pos.y, fr, fg, fb);
       const lc = glc(frame.id, layer.id), lctx = lc.getContext('2d');
-      undoMap.current[`${frame.id}_${layer.id}`] = lctx.getImageData(0, 0, CW, CH);
+      pushUndo(frame.id, layer.id);
       const ld = lctx.getImageData(0, 0, CW, CH);
       for (let i = 0; i < after.data.length; i += 4) {
         if (after.data[i]!==before.data[i]||after.data[i+1]!==before.data[i+1]||after.data[i+2]!==before.data[i+2]) {
@@ -368,7 +377,7 @@ function App() {
 
     const frame = FR.current[FI.current]; if (!frame) return;
     const layer = frame.layers[LI.current]; if (!layer) return;
-    undoMap.current[`${frame.id}_${layer.id}`] = glc(frame.id, layer.id).getContext('2d').getImageData(0, 0, CW, CH);
+    pushUndo(frame.id, layer.id);
     drg.current = true; lxy.current = pos;
     applyStroke(pos, pos);
   }, [playing, comp, glc, rerender, mkThumb, materials]);
@@ -476,7 +485,7 @@ function App() {
   const clrLayer = () => {
     const frame=frames[fi], layer=frame && frame.layers[li]; if(!layer) return;
     const lc=glc(frame.id,layer.id), ctx=lc.getContext('2d');
-    undoMap.current[`${frame.id}_${layer.id}`]=ctx.getImageData(0,0,CW,CH);
+    pushUndo(frame.id, layer.id);
     ctx.clearRect(0,0,CW,CH); rerender(); mkThumb(frame);
   };
 
@@ -619,7 +628,7 @@ function App() {
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'linear-gradient(135deg, #ffeef8 0%, #fff9e6 25%, #e0f7ff 50%, #f0e6ff 75%, #ffe6f0 100%)', color:'#333', fontFamily:'system-ui,-apple-system,sans-serif', overflow:'hidden', userSelect:'none' }}>
 
-      <div style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', background:'rgba(255,255,255,0.8)', borderBottom:'1px solid rgba(0,0,0,0.1)', flexShrink:0 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:5, rowGap:6, padding:'6px 10px', background:'rgba(255,255,255,0.8)', borderBottom:'1px solid rgba(0,0,0,0.1)', flexShrink:0, flexWrap:'wrap' }}>
         <span style={{ fontSize:14, fontWeight:800, color:'#ff6b9d', marginRight:4 }}>🎬 パラパラ漫画</span>
         <Btn onClick={save}>💾 保存</Btn>
         <Btn onClick={load}>📂 開く</Btn>
@@ -631,7 +640,7 @@ function App() {
         <Sep />
         <Btn onClick={expGif} disabled={!gifOk || gifBusy}>🖼 GIF</Btn>
         <Btn onClick={expVid}>🎞 動画</Btn>
-        <div style={{ flex:1 }} />
+        <Sep />
         {tool === 'select' && selRect && selRect.w > 4 && (
           <Btn onClick={saveAsMaterial} hi>📌 素材に保存</Btn>
         )}
@@ -639,13 +648,13 @@ function App() {
           <Btn onClick={() => { setTool('pen'); setStampMat(null); }}>✕ 解除</Btn>
         )}
         <Btn onClick={doUndo}>↩ 元に戻す</Btn>
-        <span style={{ fontSize:10, color:'#667', minWidth:80, textAlign:'right' }}>{status}</span>
+        <span style={{ fontSize:10, color:'#667', marginLeft:'auto', whiteSpace:'nowrap' }}>{status}</span>
       </div>
 
       <div style={{ display:'flex', flex:1, overflow:'hidden', minHeight:0 }}>
 
         <div style={{ width:54, display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'8px 4px', background:'rgba(255,255,255,0.5)', borderRight:'1px solid rgba(0,0,0,0.1)', flexShrink:0, overflowY:'auto' }}>
-          {[['pen','✏️','ペン'],['eraser','⬜','消しゴム'],['fill','🪣','塗りつぶし'],['select','□','選択・操作']].map(([t, ic, lb]) => (
+          {[['pen','✏️','ペン'],['eraser',<EraserIcon key="ic" />,'消しゴム'],['fill','🪣','塗りつぶし'],['select','□','選択・操作']].map(([t, ic, lb]) => (
             <TBtn key={t} active={tool === t} onClick={() => setTool(t)} title={lb}>{ic}</TBtn>
           ))}
           {stampMat && <TBtn active={tool==='stamp'} onClick={()=>setTool('stamp')} title={stampMat.name} style={{ background: '#ff6b9d' }}>🖼</TBtn>}
@@ -788,6 +797,16 @@ function App() {
   );
 }
 
+function EraserIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" style={{ display:'block' }}>
+      <g transform="rotate(-20 12 12)">
+        <rect x="5" y="9" width="14" height="9" rx="2" fill="#ff8fb3" stroke="#c44569" strokeWidth="1.2"/>
+        <rect x="5" y="9" width="14" height="4.5" rx="2" fill="#ffd1e0" stroke="#c44569" strokeWidth="1.2"/>
+      </g>
+    </svg>
+  );
+}
 function TBtn({ children, active, onClick, title, style: s }) {
   return <button onClick={onClick} title={title} style={{ width:42, height:42, border:'none', borderRadius:9, background:active?'#ff6b9d':'white', color:active?'white':'#333', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow:active?'0 2px 8px rgba(255,107,157,0.3)':'0 2px 4px rgba(0,0,0,0.08)', ...s }}>{children}</button>;
 }
