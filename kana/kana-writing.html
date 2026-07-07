@@ -247,6 +247,13 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
       <div class="loading" id="loading"><div class="spinner"></div><div>もじをえらんでね</div></div>
     </div>
 
+    <!-- 前後ナビ -->
+    <div class="nav-row" id="nav-row" style="display:none">
+      <button class="n-btn" id="nav-prev" onclick="navChar(-1)">◀ まえ</button>
+      <div class="nav-ch" id="nav-ch"></div>
+      <button class="n-btn" id="nav-next" onclick="navChar(1)">つぎ ▶</button>
+    </div>
+
     <!-- 情報行 -->
     <div class="info-row">
       <span class="stroke-label" id="stroke-label"></span>
@@ -300,13 +307,6 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
     <!-- 文字グリッド -->
     <div class="char-scroll">
       <div class="char-grid" id="char-grid"></div>
-    </div>
-
-    <!-- 前後ナビ -->
-    <div class="nav-row" id="nav-row" style="display:none">
-      <button class="n-btn" id="nav-prev" onclick="navChar(-1)">◀ まえ</button>
-      <div class="nav-ch" id="nav-ch"></div>
-      <button class="n-btn" id="nav-next" onclick="navChar(1)">つぎ ▶</button>
     </div>
 
   </div>
@@ -399,10 +399,11 @@ function calcSize() {
   // 左パネル内、キャンバス以外の要素（モードトグル・情報行・ボタン行群）の実測高さを合計
   const modeToggle = document.querySelector('.mode-toggle');
   const infoRow = document.querySelector('.info-row');
+  const navRow = document.getElementById('nav-row');
   const btnRows = document.querySelectorAll('#left-panel .btn-row');
-  const gapCount = 5; // left-panelのgap(6px) × おおよその要素間隔数
+  const gapCount = 6; // left-panelのgap(6px) × おおよその要素間隔数
 
-  let chromeHeight = (modeToggle?.offsetHeight || 0) + (infoRow?.offsetHeight || 0);
+  let chromeHeight = (modeToggle?.offsetHeight || 0) + (infoRow?.offsetHeight || 0) + (navRow?.offsetHeight || 0);
   btnRows.forEach(row => { chromeHeight += row.offsetHeight; });
   chromeHeight += gapCount * 6;
   chromeHeight += 24;
@@ -1077,7 +1078,8 @@ function checkTrace() {
     document.getElementById('score-msg').textContent = 'ゆびでなぞってみてね！';
     return;
   }
-  document.getElementById('score-msg').textContent = '✨ よくできました！';
+  document.getElementById('score-msg').textContent = '✨ よくできました！つぎのもじへ…';
+  setTimeout(() => { navChar(1); }, 900);
 }
 </script>
 </body>
