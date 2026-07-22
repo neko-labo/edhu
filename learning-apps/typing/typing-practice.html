@@ -447,8 +447,14 @@ function buildKeyboard() {
 function currentList() { return DATA[curCat]; }
 function currentWord() { return curWord; }
 
+let shiritoriIdx = -1; // しりとりは順番に出題するための位置
+
 function pickRandomWord() {
   const list = currentList();
+  if (curCat === 'shiritori') {
+    shiritoriIdx = (shiritoriIdx + 1) % list.length;
+    return list[shiritoriIdx];
+  }
   if (list.length === 1) return list[0];
   let w;
   do { w = list[Math.floor(Math.random() * list.length)]; } while (w === curWord);
@@ -734,6 +740,7 @@ function toggleHint() {
 function setCat(key) {
   curCat = key;
   document.querySelectorAll('.kana-tab').forEach(b => b.classList.toggle('active', b.dataset.cat === key));
+  if (key === 'shiritori') shiritoriIdx = -1;
   loadNewWord();
 }
 
