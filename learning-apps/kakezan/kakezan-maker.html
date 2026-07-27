@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>かけざん もんだい つくり</title>
+<style>
+:root{
+  --pink:#ff6b9d;--pink-l:#ffe0ee;
+  --blue:#5ba8ff;--blue-l:#deeeff;
+  --yellow:#ffce47;--green:#47cc8a;
+  --gray:#aaa;--text:#333;
+  --bg:#fffdf5;--card:#fff;
+}
+*{box-sizing:border-box}
+body{
+  font-family:'Klee One','Hiragino Kaku Gothic ProN',sans-serif;
+  background:var(--bg);color:var(--text);
+  min-height:100dvh;margin:0;
+  display:flex;flex-direction:column;
+  user-select:none;-webkit-user-select:none;
+}
+header{
+  background:var(--pink);padding:8px 14px;
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+  box-shadow:0 2px 6px rgba(0,0,0,.2);
+}
+header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
+
+.wrap{ max-width:900px;margin:0 auto;width:100%;padding:14px 14px 60px; }
+
+.prompt-box{
+  background:var(--card);border:2px solid var(--pink-l);border-radius:12px;
+  padding:10px 14px;margin-bottom:14px;
+}
+.prompt-box label{ font-size:0.72rem;color:var(--gray);font-weight:bold;display:block;margin-bottom:4px; }
+.prompt-box input{
+  width:100%;border:none;font-family:inherit;font-size:1rem;color:var(--text);
+  outline:none;background:transparent;
+}
+
+.section-label{ font-size:0.75rem;color:var(--gray);font-weight:bold;margin:14px 0 6px; }
+.section-note{ font-size:0.7rem;color:#bbb;margin:-4px 0 8px; }
+
+/* ドラッグ元のパレット */
+.item-palette{ display:flex;gap:8px;flex-wrap:wrap; }
+.item-src{
+  width:50px;height:50px;border-radius:12px;border:2px solid #eee;background:#fff;
+  font-size:1.7rem;display:flex;align-items:center;justify-content:center;
+  cursor:grab;touch-action:none;box-shadow:0 2px 0 #eee;
+}
+.item-src:active{ cursor:grabbing; }
+
+.add-row{ display:flex;gap:8px;margin:14px 0;flex-wrap:wrap; }
+.add-btn{
+  padding:9px 16px;border:none;border-radius:12px;background:var(--blue-l);color:var(--blue);
+  font-family:inherit;font-size:0.85rem;font-weight:bold;cursor:pointer;
+  display:flex;align-items:center;gap:6px;
+}
+.add-btn:active{ transform:scale(0.96); }
+
+.work-area{
+  display:flex;flex-wrap:wrap;gap:16px;min-height:140px;
+  padding:16px;background:#fff;border:2px dashed #eee;border-radius:14px;
+}
+.work-area.empty::before{
+  content:"↑ボタンで お皿・はこ・かごを ふやしてね";
+  color:#ccc;font-size:0.85rem;width:100%;text-align:center;padding:30px 0;
+}
+
+.container-card{
+  border-radius:14px;padding:12px;min-width:150px;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  position:relative;transition:box-shadow .12s, transform .12s;
+}
+.container-card.plate{ background:#eef7ff;border:2px solid #bcdcff; }
+.container-card.box{ background:#fbf1e2;border:2px solid #e8cfa0; }
+.container-card.basket{ background:#eefaf0;border:2px solid #b9e6c3; }
+.container-card.drag-over{ transform:scale(1.06); box-shadow:0 0 0 4px var(--pink); }
+
+.container-label{ font-size:0.75rem;font-weight:bold;color:var(--gray); }
+.del-btn{
+  position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;
+  border:none;background:#fff;color:#e05555;font-size:0.8rem;font-weight:bold;
+  cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.15);
+  display:flex;align-items:center;justify-content:center;
+}
+
+.item-display{
+  display:flex;flex-wrap:wrap;gap:2px;justify-content:center;
+  min-height:74px;width:100%;align-content:flex-start;max-width:180px;
+}
+.item-display span{ font-size:1.5rem;line-height:1;cursor:pointer; }
+.item-display span:active{ transform:scale(0.8); }
+.item-display .empty-hint{ font-size:0.68rem;color:#ccc;padding:24px 4px;text-align:center; }
+
+.clear-all{
+  margin-top:14px;display:block;margin-left:auto;margin-right:auto;
+  padding:7px 18px;border:none;border-radius:10px;background:#eee;color:#888;
+  font-family:inherit;font-size:0.78rem;font-weight:bold;cursor:pointer;
+}
+
+.shot-btn{
+  display:block;margin:20px auto 0;padding:12px 28px;border:none;border-radius:14px;
+  background:var(--green);color:#fff;font-family:inherit;font-size:0.95rem;
+  font-weight:bold;cursor:pointer;box-shadow:0 3px 0 #2ea86e;
+}
+.shot-btn:active{ transform:translateY(2px); box-shadow:0 1px 0 #2ea86e; }
+
+/* ドラッグ中のゴースト */
+.drag-ghost{
+  position:fixed;top:0;left:0;font-size:2rem;pointer-events:none;z-index:999;
+  transform:translate(-50%,-50%);filter:drop-shadow(0 3px 4px rgba(0,0,0,.25));
+}
+
+/* 文章もんだいセクション */
+.sentence-box{
+  background:#fff;border:2px solid var(--yellow);border-radius:14px;
+  padding:16px;margin-top:6px;
+}
+.sentence-preview{
+  font-size:1rem;line-height:2;background:#fffbe8;border-radius:10px;
+  padding:14px;margin-bottom:14px;
+}
+.sentence-preview b{ color:var(--pink); }
+.sentence-controls{ display:flex;flex-wrap:wrap;gap:12px; }
+.sctrl{ display:flex;flex-direction:column;gap:3px; }
+.sctrl label{ font-size:0.68rem;color:var(--gray);font-weight:bold; }
+.sctrl select, .sctrl input{
+  font-family:inherit;font-size:0.9rem;padding:6px 8px;border:2px solid #eee;
+  border-radius:8px;color:var(--text);width:90px;
+}
+
+.hint-note{
+  margin-top:22px;background:var(--yellow);color:#333;border-radius:12px;
+  padding:12px 16px;font-size:0.82rem;line-height:1.7;text-align:center;
+}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>🍎 かけざん もんだい つくり</h1>
+</header>
+
+<div class="wrap">
+
+  <div class="prompt-box">
+    <label>もんだいの ぶんしょう（じゆうに かいてね）</label>
+    <input id="prompt-text" type="text" placeholder="れい：りんごは ぜんぶで なんこ あるかな？" />
+  </div>
+
+  <div class="section-label no-capture">① 容器を ふやす</div>
+  <div class="add-row no-capture">
+    <button class="add-btn" onclick="addContainer('plate')">🍽️ ＋ おさら</button>
+    <button class="add-btn" onclick="addContainer('box')">📦 ＋ はこ</button>
+    <button class="add-btn" onclick="addContainer('basket')">🧺 ＋ かご</button>
+  </div>
+
+  <div class="section-label no-capture">② ものを ゆびで つまんで、いれものの中へ ドラッグ！</div>
+  <div class="section-note no-capture">（入れたものを タップすると 1つ けせるよ）</div>
+  <div class="item-palette no-capture" id="item-palette"></div>
+
+  <div class="section-label no-capture" style="margin-top:16px">③ できあがり</div>
+  <div class="work-area empty" id="work-area"></div>
+
+  <button class="clear-all no-capture" onclick="clearAll()">🗑 ぜんぶ けす</button>
+
+  <div class="section-label no-capture" style="margin-top:26px">📝 ぶんしょう もんだいを つくる</div>
+  <div class="sentence-box">
+    <div class="sentence-preview" id="sentence-preview"></div>
+    <div class="sentence-controls no-capture">
+      <div class="sctrl">
+        <label>いれもの</label>
+        <select id="s-container" onchange="updateSentence()">
+          <option value="plate">おさら</option>
+          <option value="box">はこ</option>
+          <option value="basket">かご</option>
+        </select>
+      </div>
+      <div class="sctrl">
+        <label>なかみ</label>
+        <select id="s-item" onchange="updateSentence()"></select>
+      </div>
+      <div class="sctrl">
+        <label>1つに いくつ</label>
+        <input type="number" id="s-per" min="1" max="20" value="3" oninput="updateSentence()">
+      </div>
+      <div class="sctrl">
+        <label>いくつぶん</label>
+        <input type="number" id="s-groups" min="1" max="20" value="4" oninput="updateSentence()">
+      </div>
+    </div>
+  </div>
+
+  <button class="shot-btn no-capture" onclick="takeScreenshot()">📸 スクリーンショットを ほぞん</button>
+
+  <div class="hint-note no-capture">
+    「📸 スクリーンショットを ほぞん」を おすと、<br>
+    もんだいの がぞうが ほぞんされるよ。<br>
+    オクリンクプラスに はりつけて、<br>
+    お友だちに といてもらおう！
+  </div>
+
+</div>
+
+<script>
+const ITEMS = ['🍎','🍊','🍇','🍓','🍑','🍪','🍬','🍩','⚪','🔵'];
+const WORD_MAP = {
+  '🍎':'りんご','🍊':'みかん','🍇':'ぶどう','🍓':'いちご','🍑':'もも',
+  '🍪':'クッキー','🍬':'あめ','🍩':'ドーナツ','⚪':'しろい おはじき','🔵':'あおい おはじき'
+};
+const LABELS = { plate:'おさら', box:'はこ', basket:'かご' };
+const ICONS = { plate:'🍽️', box:'📦', basket:'🧺' };
+
+let containers = []; // { id, type, items:[emoji,...] }
+let nextId = 1;
+let dragState = null;
+
+// ============================================================
+// パレット（ドラッグ元）
+// ============================================================
+function buildPalette() {
+  const wrap = document.getElementById('item-palette');
+  wrap.innerHTML = '';
+  ITEMS.forEach(it => {
+    const btn = document.createElement('div');
+    btn.className = 'item-src';
+    btn.textContent = it;
+    btn.onpointerdown = e => startDrag(it, e);
+    wrap.appendChild(btn);
+  });
+}
+
+// ============================================================
+// ドラッグ＆ドロップ
+// ============================================================
+function startDrag(item, e) {
+  e.preventDefault();
+  const ghost = document.createElement('div');
+  ghost.className = 'drag-ghost';
+  ghost.textContent = item;
+  document.body.appendChild(ghost);
+  dragState = { item, ghostEl: ghost };
+  moveGhost(e);
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd);
+}
+
+function getXY(e) {
+  if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
+function moveGhost(e) {
+  if (!dragState) return;
+  const { x, y } = getXY(e);
+  dragState.ghostEl.style.left = x + 'px';
+  dragState.ghostEl.style.top = y + 'px';
+  document.querySelectorAll('.container-card').forEach(c => c.classList.remove('drag-over'));
+  const el = document.elementFromPoint(x, y);
+  const card = el && el.closest && el.closest('.container-card');
+  if (card) card.classList.add('drag-over');
+}
+
+function onDragMove(e) { e.preventDefault(); moveGhost(e); }
+
+function onDragEnd(e) {
+  if (!dragState) return;
+  const { x, y } = getXY(e);
+  const el = document.elementFromPoint(x, y);
+  const card = el && el.closest && el.closest('.container-card');
+  if (card) {
+    const id = parseInt(card.dataset.id, 10);
+    const c = containers.find(cc => cc.id === id);
+    if (c) c.items.push(dragState.item);
+  }
+  document.body.removeChild(dragState.ghostEl);
+  document.querySelectorAll('.container-card').forEach(c => c.classList.remove('drag-over'));
+  dragState = null;
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragEnd);
+  renderAll();
+}
+
+// ============================================================
+// 容器の管理
+// ============================================================
+function addContainer(type) {
+  containers.push({ id: nextId++, type, items: [] });
+  renderAll();
+}
+
+function removeContainer(id) {
+  containers = containers.filter(c => c.id !== id);
+  renderAll();
+}
+
+function removeItemAt(containerId, idx) {
+  const c = containers.find(c => c.id === containerId);
+  if (!c) return;
+  c.items.splice(idx, 1);
+  renderAll();
+}
+
+function clearAll() {
+  containers = [];
+  renderAll();
+}
+
+function renderAll() {
+  const area = document.getElementById('work-area');
+  area.innerHTML = '';
+  area.classList.toggle('empty', containers.length === 0);
+
+  containers.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'container-card ' + c.type;
+    card.dataset.id = c.id;
+
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '✕';
+    del.onclick = () => removeContainer(c.id);
+    card.appendChild(del);
+
+    const label = document.createElement('div');
+    label.className = 'container-label';
+    label.textContent = ICONS[c.type] + ' ' + LABELS[c.type];
+    card.appendChild(label);
+
+    const disp = document.createElement('div');
+    disp.className = 'item-display';
+    if (c.items.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'ここに ドラッグ！';
+      disp.appendChild(hint);
+    } else {
+      c.items.forEach((it, idx) => {
+        const s = document.createElement('span');
+        s.textContent = it;
+        s.onclick = () => removeItemAt(c.id, idx);
+        disp.appendChild(s);
+      });
+    }
+    card.appendChild(disp);
+
+    area.appendChild(card);
+  });
+}
+
+// ============================================================
+// 文章もんだい
+// ============================================================
+function buildItemSelect() {
+  const sel = document.getElementById('s-item');
+  sel.innerHTML = '';
+  ITEMS.forEach(it => {
+    const opt = document.createElement('option');
+    opt.value = it;
+    opt.textContent = it + ' ' + WORD_MAP[it];
+    sel.appendChild(opt);
+  });
+}
+
+function updateSentence() {
+  const containerWord = LABELS[document.getElementById('s-container').value];
+  const itemEmoji = document.getElementById('s-item').value;
+  const itemWord = WORD_MAP[itemEmoji];
+  const per = document.getElementById('s-per').value || 0;
+  const groups = document.getElementById('s-groups').value || 0;
+
+  const html = `ひとつの<b>${containerWord}</b>に、<b>${itemWord}</b>が<b>${per}</b>こずつ 入っています。<br>
+    <b>${containerWord}</b>は<b>${groups}</b>こ あります。<br>
+    ${itemWord}は ぜんぶで なんこ ありますか。`;
+  document.getElementById('sentence-preview').innerHTML = html;
+}
+
+// ============================================================
+// 初期化
+// ============================================================
+// ============================================================
+// スクリーンショット保存
+// ============================================================
+function takeScreenshot() {
+  const target = document.querySelector('.wrap');
+  html2canvas(target, {
+    backgroundColor: '#fffdf5',
+    scale: 2,
+    ignoreElements: (el) => el.classList && el.classList.contains('no-capture')
+  }).then(canvas => {
+    const link = document.createElement('a');
+    link.download = 'かけざんもんだい.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }).catch(() => {
+    alert('ほぞんに しっぱいしました。もういちど ためしてね。');
+  });
+}
+
+// ============================================================
+// 初期化
+// ============================================================
+buildPalette();
+buildItemSelect();
+renderAll();
+updateSentence();
+</script>
+</body>
+</html>
