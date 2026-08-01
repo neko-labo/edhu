@@ -123,12 +123,50 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
   padding:14px;margin-bottom:14px;
 }
 .sentence-preview b{ color:var(--pink); }
+
+.answer-space{
+  margin-top:12px;background:#fff;border:2px solid var(--pink-l);border-radius:10px;
+  padding:14px 16px;
+}
+.answer-line{ display:flex;align-items:baseline;gap:8px;margin-bottom:10px; }
+.answer-line:last-child{ margin-bottom:0; }
+.answer-line .al-label{ font-size:0.85rem;font-weight:bold;color:var(--gray);flex-shrink:0; }
+.answer-line .al-blank{
+  flex:1;border-bottom:2px solid #ddd;min-height:28px;
+}
 .sentence-controls{ display:flex;flex-wrap:wrap;gap:12px; }
 .sctrl{ display:flex;flex-direction:column;gap:3px; }
 .sctrl label{ font-size:0.68rem;color:var(--gray);font-weight:bold; }
 .sctrl select, .sctrl input{
   font-family:inherit;font-size:0.9rem;padding:6px 8px;border:2px solid #eee;
   border-radius:8px;color:var(--text);width:90px;
+}
+.num-btn{
+  font-family:inherit;font-size:1.1rem;font-weight:bold;padding:6px 8px;
+  border:2px solid var(--pink-l);border-radius:8px;color:var(--pink);
+  width:90px;background:#fff;cursor:pointer;
+}
+.num-btn:active{ background:var(--pink-l); }
+
+.num-popup{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);
+  z-index:300;align-items:center;justify-content:center;padding:20px;
+}
+.num-popup.show{ display:flex; }
+.num-popup-inner{
+  background:#fff;border-radius:18px;padding:20px;max-width:320px;width:100%;
+  box-shadow:0 10px 26px rgba(0,0,0,.3);
+}
+.num-popup-title{ font-size:0.95rem;font-weight:bold;color:var(--pink);text-align:center;margin-bottom:12px; }
+.num-grid{ display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px; }
+.num-grid button{
+  aspect-ratio:1;border:2px solid var(--pink-l);border-radius:10px;background:#fff;
+  font-family:inherit;font-size:1rem;font-weight:bold;color:var(--text);cursor:pointer;
+}
+.num-grid button:active{ background:var(--pink-l); }
+.num-popup-close{
+  display:block;margin:0 auto;padding:7px 22px;border:none;border-radius:10px;
+  background:#eee;color:#888;font-family:inherit;font-size:0.8rem;font-weight:bold;cursor:pointer;
 }
 
 .hint-note{
@@ -170,6 +208,16 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
   <div class="section-label no-capture" style="margin-top:26px">📝 ぶんしょう もんだいを つくる</div>
   <div class="sentence-box">
     <div class="sentence-preview" id="sentence-preview"></div>
+    <div class="answer-space">
+      <div class="answer-line">
+        <span class="al-label">しき：</span>
+        <span class="al-blank"></span>
+      </div>
+      <div class="answer-line">
+        <span class="al-label">こたえ：</span>
+        <span class="al-blank"></span>
+      </div>
+    </div>
     <div class="sentence-controls no-capture">
       <div class="sctrl">
         <label>いれもの</label>
@@ -185,22 +233,29 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
       </div>
       <div class="sctrl">
         <label>1つに いくつ</label>
-        <input type="number" id="s-per" min="1" max="20" value="3" oninput="updateSentence()">
+        <button class="num-btn" id="s-per" onclick="openNumPicker('s-per')">3</button>
       </div>
       <div class="sctrl">
         <label>いくつぶん</label>
-        <input type="number" id="s-groups" min="1" max="20" value="4" oninput="updateSentence()">
+        <button class="num-btn" id="s-groups" onclick="openNumPicker('s-groups')">4</button>
       </div>
     </div>
   </div>
 
   <button class="shot-btn no-capture" onclick="takeScreenshot()">📸 スクリーンショットを ほぞん</button>
 
+  <!-- 数字えらびポップアップ -->
+  <div class="num-popup no-capture" id="num-popup">
+    <div class="num-popup-inner">
+      <div class="num-popup-title">なんこ？</div>
+      <div class="num-grid" id="num-grid"></div>
+      <button class="num-popup-close" onclick="closeNumPicker()">とじる</button>
+    </div>
+  </div>
+
   <div class="hint-note no-capture">
     「📸 スクリーンショットを ほぞん」を おすと、<br>
     もんだいの がぞうが ほぞんされるよ。<br>
-    オクリンクプラスに はりつけて、<br>
-    お友だちに といてもらおう！
   </div>
 
 </div>
@@ -369,13 +424,44 @@ function updateSentence() {
   const containerWord = LABELS[document.getElementById('s-container').value];
   const itemEmoji = document.getElementById('s-item').value;
   const itemWord = WORD_MAP[itemEmoji];
-  const per = document.getElementById('s-per').value || 0;
-  const groups = document.getElementById('s-groups').value || 0;
+  const per = document.getElementById('s-per').textContent || 0;
+  const groups = document.getElementById('s-groups').textContent || 0;
 
   const html = `ひとつの<b>${containerWord}</b>に、<b>${itemWord}</b>が<b>${per}</b>こずつ 入っています。<br>
     <b>${containerWord}</b>は<b>${groups}</b>こ あります。<br>
     ${itemWord}は ぜんぶで なんこ ありますか。`;
   document.getElementById('sentence-preview').innerHTML = html;
+}
+
+// ============================================================
+// 数字えらびポップアップ
+// ============================================================
+let numPickerTarget = null;
+
+function openNumPicker(targetId) {
+  numPickerTarget = targetId;
+  const grid = document.getElementById('num-grid');
+  grid.innerHTML = '';
+  for (let i = 1; i <= 20; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i;
+    btn.onclick = () => selectNum(i);
+    grid.appendChild(btn);
+  }
+  document.getElementById('num-popup').classList.add('show');
+}
+
+function selectNum(n) {
+  if (numPickerTarget) {
+    document.getElementById(numPickerTarget).textContent = n;
+    updateSentence();
+  }
+  closeNumPicker();
+}
+
+function closeNumPicker() {
+  document.getElementById('num-popup').classList.remove('show');
+  numPickerTarget = null;
 }
 
 // ============================================================
