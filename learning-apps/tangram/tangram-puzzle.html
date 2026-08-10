@@ -13,8 +13,8 @@
         
         body {
             font-family: 'Kosugi Maru', 'Hiragino Kaku Gothic ProN', sans-serif;
-            background-color: #fef9e7;
-            background-image: radial-gradient(#fdedc9 1.5px, transparent 1.5px);
+            background-color: #ffffff;
+            background-image: radial-gradient(#e5e5e5 1.5px, transparent 1.5px);
             background-size: 24px 24px;
             overflow-x: auto;  /* 横はみ出し時スクロール */
             overflow-y: auto;
@@ -27,23 +27,23 @@
 
         /* 3Dおもちゃ風の影とボタン */
         .toy-shadow {
-            box-shadow: 0 10px 0px #e5d3b3, 0 15px 25px rgba(0,0,0,0.06);
+            box-shadow: 0 10px 0px #d0d0d0, 0 15px 25px rgba(0,0,0,0.06);
         }
         .toy-btn-pink {
-            box-shadow: 0 4px 0px #db2777;
+            box-shadow: 0 4px 0px #000000;
             transition: all 0.1s ease;
         }
         .toy-btn-pink:active {
             transform: translateY(4px);
-            box-shadow: 0 0px 0px #db2777;
+            box-shadow: 0 0px 0px #000000;
         }
         .toy-btn-yellow {
-            box-shadow: 0 4px 0px #d97706;
+            box-shadow: 0 4px 0px #444444;
             transition: all 0.1s ease;
         }
         .toy-btn-yellow:active {
             transform: translateY(4px);
-            box-shadow: 0 0px 0px #d97706;
+            box-shadow: 0 0px 0px #444444;
         }
 
         /* パズルキャンバス的外枠 */
@@ -77,9 +77,9 @@
             z-index: 90 !important;
         }
 
-        /* 削除モード時のピーススタイル */
-        .delete-mode-active .puzzle-piece:hover {
-            filter: drop-shadow(0 0px 8px #ef4444) brightness(0.9);
+        /* いろぬりモード時のピーススタイル */
+        .color-mode-active .puzzle-piece:hover {
+            filter: drop-shadow(0 0px 8px #f59e0b) brightness(1.05);
             cursor: pointer;
         }
 
@@ -88,7 +88,7 @@
             transition: background-color 0.2s, transform 0.1s ease;
         }
         .rotate-handle:active {
-            background-color: #db2777 !important;
+            background-color: #000000 !important;
             transform: scale(1.15);
         }
 
@@ -97,7 +97,16 @@
             transition: background-color 0.2s, transform 0.1s ease;
         }
         .copy-handle:active {
-            background-color: #d97706 !important;
+            background-color: #444444 !important;
+            transform: scale(0.95);
+        }
+
+        /* ゴミ箱ハンドルのアクティブ演出 */
+        .trash-handle {
+            transition: background-color 0.2s, transform 0.1s ease;
+        }
+        .trash-handle:active {
+            background-color: #b91c1c !important;
             transform: scale(0.95);
         }
 
@@ -115,28 +124,28 @@
 <body class="min-h-screen flex flex-col items-center justify-between p-3 md:p-6 text-gray-800" oncontextmenu="return false;">
 
     <!-- ヘッダーエリア -->
-    <header class="w-full max-w-6xl flex flex-col md:flex-row items-center justify-between gap-3 mb-3 bg-white/95 p-4 rounded-3xl border-4 border-amber-200 shadow-sm">
+    <header class="w-full max-w-6xl flex flex-col md:flex-row items-center justify-between gap-3 mb-3 bg-white/95 p-4 rounded-3xl border-4 border-neutral-200 shadow-sm">
         <div class="flex items-center gap-3">
-            <div class="w-12 h-12 bg-pink-400 rounded-2xl flex items-center justify-center text-white text-2xl font-bold border-b-4 border-pink-600 animate-bounce">
+            <div class="w-12 h-12 bg-neutral-700 rounded-2xl flex items-center justify-center text-white text-2xl font-bold border-b-4 border-black animate-bounce">
                 🧩
             </div>
             <div>
-                <h1 class="text-xl md:text-2xl font-bold tracking-wider text-pink-500 title-font">
+                <h1 class="text-xl md:text-2xl font-bold tracking-wider text-black title-font">
                     ピタッ！と 自由なタングラム
                 </h1>
-                <p class="text-xs text-amber-600 font-bold">●▲■ つまんでうごかして、ボタンでどんどん図形を増やそう！</p>
+                <p class="text-xs text-neutral-600 font-bold">●▲■ つまんでうごかして、ボタンでどんどん図形を増やそう！</p>
             </div>
         </div>
 
         <!-- コントロールボタン -->
         <div class="flex items-center gap-2 flex-wrap justify-center">
             <!-- 音スイッチ -->
-            <button id="sound-toggle" onclick="toggleSound()" class="px-3 py-2 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-700 transition-colors flex items-center gap-1 font-bold text-xs border-2 border-amber-300">
+            <button id="sound-toggle" onclick="toggleSound()" class="px-3 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition-colors flex items-center gap-1 font-bold text-xs border-2 border-neutral-300">
                 <i id="sound-icon" data-lucide="volume-2" class="w-4 h-4"></i>
                 <span>おと: ON</span>
             </button>
             <!-- ぜんぶけす -->
-            <button onclick="confirmReset()" class="px-3 py-2 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors flex items-center gap-1 font-bold text-xs border-2 border-rose-200">
+            <button onclick="confirmReset()" class="px-3 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-100 text-black transition-colors flex items-center gap-1 font-bold text-xs border-2 border-neutral-200">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                 <span>ぜんぶ片づける</span>
             </button>
@@ -147,57 +156,57 @@
     <main class="w-full max-w-6xl flex flex-col lg:flex-row gap-4 items-stretch justify-center flex-grow mb-3">
         
         <!-- パズルキャンバス（プレイエリア） -->
-        <div id="canvas-wrapper" class="flex-grow flex flex-col items-center justify-center bg-white p-3 md:p-4 rounded-[2.5rem] border-8 border-amber-300 toy-shadow relative">
+        <div id="canvas-wrapper" class="flex-grow flex flex-col items-center justify-center bg-white p-3 md:p-4 rounded-[2.5rem] border-8 border-neutral-300 toy-shadow relative">
             
             <!-- キャンバス本体：縦横460px -->
-            <div id="play-area" class="w-full max-w-[460px] aspect-square rounded-2xl overflow-hidden border-4 border-amber-100 shadow-inner relative" onclick="deselectAll(event)">
+            <div id="play-area" class="w-full max-w-[460px] aspect-square rounded-2xl overflow-hidden border-4 border-neutral-100 shadow-inner relative" onclick="deselectAll(event)">
                 
                 <!-- リアルタイムに動くピースたちが格納されるコンテナ -->
                 <div id="pieces-container" class="absolute inset-0"></div>
 
                 <!-- ガイド枠（中心線） -->
-                <div class="absolute inset-0 border border-amber-200/50 pointer-events-none flex items-center justify-center">
-                    <div class="w-full h-[1px] bg-dashed border-t border-amber-200/40"></div>
-                    <div class="h-full w-[1px] bg-dashed border-l border-amber-200/40 absolute"></div>
+                <div class="absolute inset-0 border border-neutral-200/50 pointer-events-none flex items-center justify-center">
+                    <div class="w-full h-[1px] bg-dashed border-t border-neutral-200/40"></div>
+                    <div class="h-full w-[1px] bg-dashed border-l border-neutral-200/40 absolute"></div>
                 </div>
 
             </div>
 
             <!-- 操作ヘルプテキスト -->
             <div class="mt-3 text-center">
-                <p class="text-xs font-bold text-amber-800 bg-amber-50 px-4 py-1.5 rounded-full border border-amber-200 inline-block">
-                    👈 うごかす / 👆 タップすると「回転」や「ふやす」ボタンが出るよ！ / 🎨 色をタップでぬりかえ！
+                <p class="text-xs font-bold text-neutral-800 bg-neutral-50 px-4 py-1.5 rounded-full border border-neutral-200 inline-block">
+                    👈 うごかす / 👆 タップして選ぶと「回転」「ふやす」「けす」ボタンが出るよ！ / 🎨 いろぬりモードをONにすると、タップでどんどんぬりかえられるよ！
                 </p>
             </div>
         </div>
 
         <!-- 右側コントロールパネル -->
-        <div class="w-full lg:w-96 flex flex-col gap-4 justify-between bg-white/95 p-4 md:p-5 rounded-[2.5rem] border-4 border-amber-200">
+        <div class="w-full lg:w-96 flex flex-col gap-4 justify-between bg-white/95 p-4 md:p-5 rounded-[2.5rem] border-4 border-neutral-200">
             
             <!-- ① ピースを自由に追加する -->
             <div>
-                <h2 class="text-xs font-bold text-amber-700 mb-2 flex items-center gap-1">
-                    <span class="w-5 h-5 bg-pink-500 rounded-full text-white text-[11px] flex items-center justify-center font-bold">1</span>
+                <h2 class="text-xs font-bold text-neutral-700 mb-2 flex items-center gap-1">
+                    <span class="w-5 h-5 bg-black rounded-full text-white text-[11px] flex items-center justify-center font-bold">1</span>
                     図形をふやす（何個でも増やせるよ！）
                 </h2>
-                <div class="grid grid-cols-3 gap-2 bg-amber-50 p-2.5 rounded-2xl border border-amber-200">
-                    <button onclick="spawnPiece('tri-large')" class="p-2 rounded-xl bg-white hover:bg-pink-50 border-2 border-amber-200 flex flex-col items-center justify-center pop-hover shadow-sm">
+                <div class="grid grid-cols-3 gap-2 bg-neutral-50 p-2.5 rounded-2xl border border-neutral-200">
+                    <button onclick="spawnPiece('tri-large')" class="p-2 rounded-xl bg-white hover:bg-neutral-100 border-2 border-neutral-200 flex flex-col items-center justify-center pop-hover shadow-sm">
                         <svg class="w-8 h-8 text-red-500 fill-current" viewBox="0 0 100 100"><polygon points="0,0 100,0 0,100"/></svg>
                         <span class="text-[9px] font-bold mt-1 text-gray-700">大さんかく</span>
                     </button>
-                    <button onclick="spawnPiece('tri-medium')" class="p-2 rounded-xl bg-white hover:bg-pink-50 border-2 border-amber-200 flex flex-col items-center justify-center pop-hover shadow-sm">
+                    <button onclick="spawnPiece('tri-medium')" class="p-2 rounded-xl bg-white hover:bg-neutral-100 border-2 border-neutral-200 flex flex-col items-center justify-center pop-hover shadow-sm">
                         <svg class="w-8 h-8 text-green-500 fill-current" viewBox="0 0 100 100"><polygon points="0,0 100,0 0,100"/></svg>
                         <span class="text-[9px] font-bold mt-1 text-gray-700">中さんかく</span>
                     </button>
-                    <button onclick="spawnPiece('tri-small')" class="p-2 rounded-xl bg-white hover:bg-pink-50 border-2 border-amber-200 flex flex-col items-center justify-center pop-hover shadow-sm">
+                    <button onclick="spawnPiece('tri-small')" class="p-2 rounded-xl bg-white hover:bg-neutral-100 border-2 border-neutral-200 flex flex-col items-center justify-center pop-hover shadow-sm">
                         <svg class="w-8 h-8 text-blue-500 fill-current" viewBox="0 0 100 100"><polygon points="0,0 100,0 0,100"/></svg>
                         <span class="text-[9px] font-bold mt-1 text-gray-700">小さんかく</span>
                     </button>
-                    <button onclick="spawnPiece('rect')" class="p-2 rounded-xl bg-white hover:bg-pink-50 border-2 border-amber-200 flex flex-col items-center justify-center pop-hover shadow-sm">
+                    <button onclick="spawnPiece('rect')" class="p-2 rounded-xl bg-white hover:bg-neutral-100 border-2 border-neutral-200 flex flex-col items-center justify-center pop-hover shadow-sm">
                         <svg class="w-8 h-8 text-amber-500 fill-current" viewBox="0 0 100 100"><rect x="0" y="0" width="100" height="100" rx="3"/></svg>
                         <span class="text-[9px] font-bold mt-1 text-gray-700">しかく</span>
                     </button>
-                    <button onclick="spawnPiece('parallelogram')" class="p-2 rounded-xl bg-white hover:bg-pink-50 border-2 border-amber-200 flex flex-col items-center justify-center pop-hover shadow-sm col-span-2">
+                    <button onclick="spawnPiece('parallelogram')" class="p-2 rounded-xl bg-white hover:bg-neutral-100 border-2 border-neutral-200 flex flex-col items-center justify-center pop-hover shadow-sm col-span-2">
                         <svg class="w-16 h-8 text-purple-500 fill-current" viewBox="0 0 142 71"><polygon points="71,0 142,0 71,71 0,71"/></svg>
                         <span class="text-[9px] font-bold mt-1 text-gray-700">平行四辺形</span>
                     </button>
@@ -207,36 +216,29 @@
             <!-- ② いろをえらぶ -->
             <div>
                 <div class="flex items-center justify-between mb-1.5">
-                    <h2 class="text-xs font-bold text-amber-700 flex items-center gap-1">
-                        <span class="w-5 h-5 bg-pink-500 rounded-full text-white text-[11px] flex items-center justify-center font-bold">2</span>
+                    <h2 class="text-xs font-bold text-neutral-700 flex items-center gap-1">
+                        <span class="w-5 h-5 bg-black rounded-full text-white text-[11px] flex items-center justify-center font-bold">2</span>
                         ピースの色を選ぶ
                     </h2>
-                    <label class="flex items-center gap-1 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 text-[10px] font-bold text-amber-800 cursor-pointer pop-hover">
+                    <label class="flex items-center gap-1 bg-neutral-100 px-2 py-0.5 rounded-full border border-neutral-300 text-[10px] font-bold text-neutral-800 cursor-pointer pop-hover">
                         <span>カスタム🎨</span>
                         <input type="color" id="custom-color-picker" onchange="selectColor(this.value)" class="w-3.5 h-3.5 rounded-md cursor-pointer border-0 bg-transparent">
                     </label>
                 </div>
                 <!-- ぬりえカラーパレット -->
-                <div class="grid grid-cols-6 gap-1.5 bg-amber-50 p-2 rounded-2xl border border-amber-200" id="palette-grid">
+                <div class="grid grid-cols-6 gap-1.5 bg-neutral-50 p-2 rounded-2xl border border-neutral-200" id="palette-grid">
                     <!-- JSでパレットが追加されます -->
                 </div>
-            </div>
-
-            <!-- ③ 図形を個別に消す（ゴミ箱モード） -->
-            <div>
-                <h2 class="text-xs font-bold text-amber-700 mb-1.5 flex items-center gap-1">
-                    <span class="w-5 h-5 bg-pink-500 rounded-full text-white text-[11px] flex items-center justify-center font-bold">3</span>
-                    いらない図形をけす
-                </h2>
-                <button id="btn-delete-mode" onclick="toggleDeleteMode()" class="w-full py-2.5 rounded-xl bg-white border-2 border-rose-300 text-rose-600 font-bold text-xs flex items-center justify-center gap-2 pop-hover shadow-sm">
-                    <i data-lucide="eraser" class="w-4 h-4"></i>
-                    <span id="delete-mode-text">けしごむモード: OFF</span>
+                <!-- いろぬりモード切替：連続で色をぬりかえたいときはON -->
+                <button id="btn-color-mode" onclick="toggleColorMode()" class="mt-2 w-full py-2.5 rounded-xl bg-white border-2 border-neutral-300 text-black font-bold text-xs flex items-center justify-center gap-2 pop-hover shadow-sm">
+                    <i data-lucide="paintbrush" class="w-4 h-4"></i>
+                    <span id="color-mode-text">いろぬりモード: OFF</span>
                 </button>
             </div>
 
             <!-- アクションボタン -->
-            <div class="flex flex-col gap-2 pt-2 border-t border-amber-100">
-                <button onclick="downloadImage()" class="w-full py-3 rounded-2xl bg-pink-500 hover:bg-pink-400 text-white font-bold text-base flex items-center justify-center gap-2 toy-btn-pink">
+            <div class="flex flex-col gap-2 pt-2 border-t border-neutral-100">
+                <button onclick="downloadImage()" class="w-full py-3 rounded-2xl bg-black hover:bg-neutral-700 text-white font-bold text-base flex items-center justify-center gap-2 toy-btn-pink">
                     <i data-lucide="download" class="w-5.5 h-5.5"></i>
                     <span>しゃしんを ほぞんする</span>
                 </button>
@@ -246,13 +248,13 @@
     </main>
 
     <!-- フッター -->
-    <footer class="text-[10px] text-amber-600 font-bold bg-white/50 px-4 py-1.5 rounded-full border border-amber-200">
+    <footer class="text-[10px] text-neutral-600 font-bold bg-white/50 px-4 py-1.5 rounded-full border border-neutral-200">
         © ピタッ！と自由なタングラムパズル
     </footer>
 
     <!-- トースト通知 -->
-    <div id="toast" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 translate-y-20 opacity-0 bg-amber-900/90 text-white font-bold px-4 py-2 rounded-full flex items-center gap-2 shadow-lg transition-all duration-300 z-50 pointer-events-none text-xs">
-        <i id="toast-icon" data-lucide="info" class="w-4 h-4 text-amber-300"></i>
+    <div id="toast" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 translate-y-20 opacity-0 bg-neutral-900/90 text-white font-bold px-4 py-2 rounded-full flex items-center gap-2 shadow-lg transition-all duration-300 z-50 pointer-events-none text-xs">
+        <i id="toast-icon" data-lucide="info" class="w-4 h-4 text-neutral-300"></i>
         <span id="toast-message">メッセージ</span>
     </div>
 
@@ -260,7 +262,7 @@
         // --- 設定状態 ---
         let isSoundOn = true;
         let currentColor = "#ec4899"; // デフォルトピンク
-        let isDeleteMode = false;
+        let isColorMode = false; // いろぬりモード：ONの間はタップした図形が即座に塗り替わる
         let activePieceId = null; // 現在選択中のピースのID
         let spawnCounter = 0; // 追加された回数をカウントする
 
@@ -461,41 +463,47 @@
             currentColor = color;
             updatePaletteSelection();
             document.getElementById("custom-color-picker").value = color;
-            if (isDeleteMode) toggleDeleteMode(); // 色を選んだら消しゴムを解除
         }
 
         function updatePaletteSelection() {
             const btns = document.querySelectorAll(".palette-btn");
             btns.forEach(btn => {
                 const check = btn.querySelector("div");
-                if (btn.dataset.color === currentColor && !isDeleteMode) {
+                if (btn.dataset.color === currentColor) {
                     btn.classList.remove("border-transparent");
-                    btn.classList.add("border-pink-500", "scale-105");
+                    btn.classList.add("border-black", "scale-105");
                     check.classList.remove("hidden");
                 } else {
                     btn.classList.add("border-transparent");
-                    btn.classList.remove("border-pink-500", "scale-105");
+                    btn.classList.remove("border-black", "scale-105");
                     check.classList.add("hidden");
                 }
             });
         }
 
-        // --- けしごむモードの切替 ---
-        function toggleDeleteMode() {
-            isDeleteMode = !isDeleteMode;
-            const btn = document.getElementById("btn-delete-mode");
-            const text = document.getElementById("delete-mode-text");
+        // --- いろぬりモードの切替 ---
+        function toggleColorMode() {
+            setColorMode(!isColorMode);
+            if (isColorMode) {
+                showToast("ぬりたい図形をタップしてね！", "paintbrush");
+            }
+        }
+
+        // isColorModeの状態を直接指定して切り替える
+        function setColorMode(on) {
+            isColorMode = on;
+            const btn = document.getElementById("btn-color-mode");
+            const text = document.getElementById("color-mode-text");
             const wrapper = document.getElementById("canvas-wrapper");
 
-            if (isDeleteMode) {
-                btn.className = "w-full py-2.5 rounded-xl bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-2 pop-hover shadow-md";
-                text.textContent = "けしごむモード: ON";
-                wrapper.classList.add("delete-mode-active");
-                showToast("けしたい図形をタップしてね！", "eraser");
+            if (isColorMode) {
+                btn.className = "w-full py-2.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center gap-2 pop-hover shadow-md";
+                text.textContent = "いろぬりモード: ON";
+                wrapper.classList.add("color-mode-active");
             } else {
-                btn.className = "w-full py-2.5 rounded-xl bg-white border-2 border-rose-300 text-rose-600 font-bold text-xs flex items-center justify-center gap-2 pop-hover shadow-sm";
-                text.textContent = "けしごむモード: OFF";
-                wrapper.classList.remove("delete-mode-active");
+                btn.className = "w-full py-2.5 rounded-xl bg-white border-2 border-neutral-300 text-black font-bold text-xs flex items-center justify-center gap-2 pop-hover shadow-sm";
+                text.textContent = "いろぬりモード: OFF";
+                wrapper.classList.remove("color-mode-active");
             }
             deselectAllPieces();
             updatePaletteSelection();
@@ -601,17 +609,21 @@
                         ${data.svgContent}
                     </svg>
                     <!-- 点線のアクティブリング -->
-                    <div class="active-ring absolute inset-[-8px] border-2 border-dashed border-pink-400 rounded-lg pointer-events-none hidden"></div>
+                    <div class="active-ring absolute inset-[-8px] border-2 border-dashed border-neutral-400 rounded-lg pointer-events-none hidden"></div>
                     
-                    <!-- 【新レイアウト】上部コントロール：左に回転、右にコピー（ふやす） -->
+                    <!-- 【新レイアウト】上部コントロール：回転｜コピー（ふやす）｜ゴミ箱（けす） -->
                     <div class="rotate-handle-wrapper absolute top-[-30px] left-0 right-0 flex justify-center gap-4 hidden z-[110] select-none">
                         <!-- くるくるフリー回転ハンドル -->
-                        <div class="rotate-handle w-7 h-7 bg-pink-500 hover:bg-pink-400 text-white rounded-full flex items-center justify-center cursor-alias shadow-md">
+                        <div class="rotate-handle w-7 h-7 bg-black hover:bg-neutral-700 text-white rounded-full flex items-center justify-center cursor-alias shadow-md">
                             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                         </div>
                         <!-- 【重要】常時表示コピーボタン：長押しを完全に廃止し、ここを押すだけで複製可能に -->
-                        <div class="copy-handle w-7 h-7 bg-amber-500 hover:bg-amber-400 text-white rounded-full flex items-center justify-center cursor-pointer shadow-md" onclick="event.stopPropagation(); copyPiece('${data.id}');">
+                        <div class="copy-handle w-7 h-7 bg-neutral-700 hover:bg-neutral-400 text-white rounded-full flex items-center justify-center cursor-pointer shadow-md" onclick="event.stopPropagation(); copyPiece('${data.id}');">
                             <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        </div>
+                        <!-- ゴミ箱ボタン：押すとこの図形だけを削除 -->
+                        <div class="trash-handle w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center cursor-pointer shadow-md" onclick="event.stopPropagation(); deletePiece('${data.id}');">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                         </div>
                     </div>
                 </div>
@@ -744,9 +756,9 @@
                     return;
                 }
 
-                // 消しゴムモードならタップで即削除（play-area側より先に処理）
-                if (isDeleteMode) {
-                    deletePiece(data.id);
+                // いろぬりモードならタップで即塗り替え（play-area側より先に処理）
+                if (isColorMode) {
+                    paintPiece(data, element);
                     e.preventDefault();
                     e.stopPropagation();
                     return;
@@ -777,7 +789,7 @@
             }
 
             function onMove(e) {
-                if (isDeleteMode || isRotating) return;
+                if (isRotating) return;
                 
                 let clientX, clientY;
                 if (e.touches) {
@@ -830,11 +842,10 @@
 
                 element.style.zIndex = "10";
 
-                // ドラッグした場合はスナップ処理、タップ（未ドラッグ）は色塗り
-                if (hasDragged && !isDeleteMode) {
+                // ドラッグした場合はスナップ処理。タップ（未ドラッグ）は「選択」だけを行い、
+                // 色は変えない（いろぬりモード中はonStart側で塗り替え済み）
+                if (hasDragged) {
                     applySnap(data, element);
-                } else if (!hasDragged && !isDeleteMode) {
-                    paintPiece(data, element);
                 }
             }
 
@@ -923,7 +934,15 @@
             pieces = pieces.filter(p => p.id !== id);
             const el = document.getElementById(id);
             if (el) el.remove();
-            
+
+            if (activePieceId === id) {
+                activePieceId = null;
+                overlapCycleIds = [];
+                overlapCycleIndex = 0;
+                lastTapX = null;
+                lastTapY = null;
+            }
+
             playSound('delete');
             showToast("図形を1かけら けしました🗑️", "trash");
         }
@@ -1040,7 +1059,7 @@
             if (isSoundOn) {
                 icon.setAttribute("data-lucide", "volume-2");
                 btn.querySelector("span").textContent = "おと: ON";
-                btn.className = "px-3 py-2 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-700 transition-colors flex items-center gap-1 font-bold text-xs border-2 border-amber-300";
+                btn.className = "px-3 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition-colors flex items-center gap-1 font-bold text-xs border-2 border-neutral-300";
             } else {
                 icon.setAttribute("data-lucide", "volume-x");
                 btn.querySelector("span").textContent = "おと: OFF";
@@ -1051,7 +1070,7 @@
 
         function confirmReset() {
             resetToDefaultPieces();
-            if (isDeleteMode) toggleDeleteMode();
+            if (isColorMode) setColorMode(false);
             showToast("ピースを初期ならびにリセットしました！", "rotate-ccw");
         }
 
