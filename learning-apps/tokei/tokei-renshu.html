@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>とけいの れんしゅう</title>
+<style>
+:root{
+  --pink:#ff6b9d;--pink-l:#ffe0ee;
+  --blue:#5ba8ff;--blue-l:#deeeff;
+  --yellow:#ffce47;--green:#47cc8a;
+  --gray:#aaa;--text:#333;
+  --bg:#fffdf5;--card:#fff;
+}
+*{box-sizing:border-box}
+body{
+  font-family:'Klee One','Hiragino Kaku Gothic ProN',sans-serif;
+  background:var(--bg);color:var(--text);
+  min-height:100dvh;margin:0;
+  display:flex;flex-direction:column;
+  user-select:none;-webkit-user-select:none;
+}
+header{
+  background:var(--pink);padding:8px 14px;
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+  box-shadow:0 2px 6px rgba(0,0,0,.2);
+}
+header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
+.stars-total{
+  color:#fff;font-size:0.85rem;font-weight:bold;
+  background:rgba(255,255,255,0.25);padding:3px 10px;border-radius:12px;
+}
+
+.wrap{ max-width:520px;margin:0 auto;width:100%;padding:16px 14px 60px;display:flex;flex-direction:column;align-items:center;gap:14px; }
+
+/* モードトグル */
+.mode-toggle{
+  display:flex;width:100%;border-radius:12px;overflow:hidden;
+  border:2px solid var(--pink-l);
+}
+.mode-btn{
+  flex:1;padding:9px 8px;border:none;background:#fdf0f5;
+  font-family:inherit;font-size:0.82rem;font-weight:bold;
+  cursor:pointer;color:var(--gray);
+}
+.mode-btn.active{ background:var(--pink);color:#fff; }
+
+/* 単位トグル（5分/1分） */
+.gran-toggle{
+  display:flex;gap:8px;
+}
+.gran-btn{
+  padding:6px 14px;border:2px solid #ddd;border-radius:14px;background:#fff;
+  font-family:inherit;font-size:0.7rem;font-weight:bold;color:var(--gray);cursor:pointer;
+}
+.gran-btn.sel{ background:var(--yellow);border-color:#e6b800;color:#333; }
+
+/* 問題文 */
+.prompt-wrap{ text-align:center; }
+.prompt-label{ font-size:0.78rem;color:var(--gray);font-weight:bold; }
+.prompt-time{ font-size:1.8rem;font-weight:bold;color:var(--pink); }
+
+/* とけい */
+.clock-wrap{ position:relative;width:260px;height:260px;touch-action:none; }
+svg{ width:100%;height:100%; }
+.hand{ cursor:grab; }
+.hand.dragging{ cursor:grabbing; }
+
+/* 読み取りモードの答え選択 */
+.answer-row{ display:flex;gap:14px;align-items:center; }
+.num-btn{
+  font-family:inherit;font-size:1.4rem;font-weight:bold;padding:10px 6px;
+  border:2px solid var(--pink-l);border-radius:12px;color:var(--pink);
+  min-width:76px;background:#fff;cursor:pointer;
+}
+.num-btn:active{ background:var(--pink-l); }
+.answer-sep{ font-size:1.4rem;font-weight:bold;color:var(--gray); }
+.unit-label{ font-size:0.85rem;color:var(--gray);font-weight:bold; }
+
+.btn-row{ display:flex;gap:10px; }
+.s-btn{
+  padding:10px 24px;border:none;border-radius:12px;color:#fff;
+  font-family:inherit;font-size:0.9rem;font-weight:bold;cursor:pointer;
+}
+.btn-pink{ background:var(--pink); }
+.btn-gray{ background:#bbb; }
+
+.result-msg{ font-size:1rem;font-weight:bold;min-height:1.6em;text-align:center; }
+.result-msg.ok{ color:var(--green); }
+.result-msg.ng{ color:#e0995a; }
+
+.streak-row{
+  display:flex;align-items:center;gap:8px;
+  background:var(--pink-l);padding:5px 14px;border-radius:14px;
+}
+.streak-label{ font-size:0.68rem;font-weight:bold;color:var(--pink); }
+#streak-paws{ font-size:0.9rem;letter-spacing:2px; }
+
+/* 数字えらびポップアップ */
+.num-popup{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);
+  z-index:300;align-items:center;justify-content:center;padding:20px;
+}
+.num-popup.show{ display:flex; }
+.num-popup-inner{
+  background:#fff;border-radius:18px;padding:20px;max-width:340px;width:100%;
+  box-shadow:0 10px 26px rgba(0,0,0,.3);
+}
+.num-popup-title{ font-size:0.95rem;font-weight:bold;color:var(--pink);text-align:center;margin-bottom:12px; }
+.num-grid{ display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px;max-height:280px;overflow-y:auto; }
+.num-grid button{
+  aspect-ratio:1;border:2px solid var(--pink-l);border-radius:10px;background:#fff;
+  font-family:inherit;font-size:1rem;font-weight:bold;color:var(--text);cursor:pointer;
+}
+.num-grid button:active{ background:var(--pink-l); }
+.num-popup-close{
+  display:block;margin:0 auto;padding:7px 22px;border:none;border-radius:10px;
+  background:#eee;color:#888;font-family:inherit;font-size:0.8rem;font-weight:bold;cursor:pointer;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🕐 とけいの れんしゅう</h1>
+  <div class="stars-total">⭐ <span id="star-count">0</span></div>
+</header>
+
+<div class="wrap">
+
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="mode-read" onclick="setMode('read')">👀 よみとる</button>
+    <button class="mode-btn" id="mode-set" onclick="setMode('set')">✋ はりを うごかす</button>
+    <button class="mode-btn" id="mode-elapse" onclick="setMode('elapse')">⏱ なんぷんご・まえ</button>
+  </div>
+
+  <div class="gran-toggle">
+    <button class="gran-btn sel" id="gran-5" onclick="setGranularity(5)">5ふん たんい</button>
+    <button class="gran-btn" id="gran-1" onclick="setGranularity(1)">1ふん たんい</button>
+  </div>
+
+  <div class="prompt-wrap" id="prompt-wrap" style="display:none">
+    <div class="prompt-label" id="prompt-label">この じかんに あわせてね</div>
+    <div class="prompt-time" id="prompt-time">3じ15ふん</div>
+  </div>
+
+  <div class="clock-wrap" id="clock-wrap">
+    <svg viewBox="0 0 200 200" id="clock-svg"></svg>
+  </div>
+
+  <div class="answer-row" id="answer-row">
+    <button class="num-btn" id="ans-hour" onclick="openNumPicker('hour')">？</button>
+    <span class="unit-label">じ</span>
+    <span class="answer-sep">：</span>
+    <button class="num-btn" id="ans-min" onclick="openNumPicker('min')">？</button>
+    <span class="unit-label">ふん</span>
+  </div>
+
+  <div class="btn-row">
+    <button class="s-btn btn-pink" onclick="checkAnswer()">✓ かくにんする</button>
+    <button class="s-btn btn-gray" id="next-btn" onclick="nextProblem()" style="display:none">つぎへ ▶</button>
+  </div>
+
+  <div class="result-msg" id="result-msg"></div>
+
+  <div class="streak-row">
+    <span class="streak-label">れんぞくせいかい</span>
+    <span id="streak-paws"></span>
+  </div>
+
+</div>
+
+<!-- 数字えらびポップアップ -->
+<div class="num-popup" id="num-popup">
+  <div class="num-popup-inner">
+    <div class="num-popup-title" id="num-popup-title">なんじ？</div>
+    <div class="num-grid" id="num-grid"></div>
+    <button class="num-popup-close" onclick="closeNumPicker()">とじる</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 状態
+// ============================================================
+let mode = 'read';           // 'read' | 'set' | 'elapse'
+let granularity = 5;         // 5 | 1（分の単位）
+let curHour = 3, curMin = 0; // 出題（読み取り）/ 正解（はり動かし・けいか）の時刻
+let ansHour = null, ansMin = null; // 読み取り・けいかモードで選んだ答え
+let handHour = 12, handMin = 0;    // はり動かしモードでユーザーが置いた位置
+let dragTarget = null;       // 'hour' | 'min' | null
+let numPickerTarget = null;
+let starTotal = 0;
+let streak = 0;
+let elapseAmount = 5;        // けいかモード：なんぷん
+let elapseDir = 1;           // けいかモード：1=あと -1=まえ
+let startHourAngle = 0, startMinAngle = 0; // けいかモード：うごかす前の はり の角度（アーク表示用）
+let correctHour = 0, correctMin = 0; // けいかモードの正解
+
+try {
+  const s = localStorage.getItem('tokei_stars_v1');
+  if (s) starTotal = parseInt(s, 10) || 0;
+} catch (e) {}
+function saveProgress() {
+  try { localStorage.setItem('tokei_stars_v1', String(starTotal)); } catch (e) {}
+}
+
+const svg = document.getElementById('clock-svg');
+const NS = 'http://www.w3.org/2000/svg';
+
+// ============================================================
+// 時計の文字盤を描く（固定部分）
+// ============================================================
+function buildClockFace() {
+  svg.innerHTML = '';
+  const face = document.createElementNS(NS,'circle');
+  face.setAttribute('cx',100); face.setAttribute('cy',100); face.setAttribute('r',96);
+  face.setAttribute('fill','#fffdf5'); face.setAttribute('stroke','#ff6b9d'); face.setAttribute('stroke-width','4');
+  svg.appendChild(face);
+
+  // 5分ごとの目盛り
+  for (let i = 0; i < 60; i++) {
+    const ang = i*6*Math.PI/180;
+    const isHour = i % 5 === 0;
+    const r1 = isHour ? 82 : 88;
+    const x1 = 100 + r1*Math.sin(ang), y1 = 100 - r1*Math.cos(ang);
+    const x2 = 100 + 92*Math.sin(ang), y2 = 100 - 92*Math.cos(ang);
+    const tick = document.createElementNS(NS,'line');
+    tick.setAttribute('x1',x1); tick.setAttribute('y1',y1);
+    tick.setAttribute('x2',x2); tick.setAttribute('y2',y2);
+    tick.setAttribute('stroke', isHour ? '#333' : '#ccc');
+    tick.setAttribute('stroke-width', isHour ? 2.5 : 1);
+    svg.appendChild(tick);
+  }
+  // 数字
+  for (let h = 1; h <= 12; h++) {
+    const ang = h*30*Math.PI/180;
+    const x = 100 + 68*Math.sin(ang), y = 100 - 68*Math.cos(ang);
+    const t = document.createElementNS(NS,'text');
+    t.setAttribute('x',x); t.setAttribute('y',y+6);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-size','15'); t.setAttribute('font-weight','bold'); t.setAttribute('fill','#333');
+    t.textContent = h;
+    svg.appendChild(t);
+  }
+
+  // 針（あとで角度更新）
+  const hourHand = document.createElementNS(NS,'line');
+  hourHand.setAttribute('id','hand-hour');
+  hourHand.setAttribute('class','hand');
+  hourHand.setAttribute('x1',100); hourHand.setAttribute('y1',100);
+  hourHand.setAttribute('stroke','#333'); hourHand.setAttribute('stroke-width','6'); hourHand.setAttribute('stroke-linecap','round');
+  svg.appendChild(hourHand);
+
+  const minHand = document.createElementNS(NS,'line');
+  minHand.setAttribute('id','hand-min');
+  minHand.setAttribute('class','hand');
+  minHand.setAttribute('x1',100); minHand.setAttribute('y1',100);
+  minHand.setAttribute('stroke','#ff6b9d'); minHand.setAttribute('stroke-width','4'); minHand.setAttribute('stroke-linecap','round');
+  svg.appendChild(minHand);
+
+  const center = document.createElementNS(NS,'circle');
+  center.setAttribute('cx',100); center.setAttribute('cy',100); center.setAttribute('r',5);
+  center.setAttribute('fill','#333');
+  svg.appendChild(center);
+
+  // はり動かしモード用のドラッグ判定エリア（見えないが広めに取る）
+  ['hand-hour','hand-min'].forEach(id => {
+    document.getElementById(id).addEventListener('pointerdown', e => {
+      if (mode !== 'set') return;
+      e.preventDefault();
+      dragTarget = id === 'hand-hour' ? 'hour' : 'min';
+      window.addEventListener('pointermove', onHandDrag);
+      window.addEventListener('pointerup', onHandDragEnd);
+    });
+  });
+}
+
+function setHandAngles(h, m) {
+  const hourAngle = ((h % 12) * 30);
+  const minAngle = (m * 6);
+  const hh = document.getElementById('hand-hour');
+  const mh = document.getElementById('hand-min');
+  const hx = 100 + 45*Math.sin(hourAngle*Math.PI/180), hy = 100 - 45*Math.cos(hourAngle*Math.PI/180);
+  const mx = 100 + 72*Math.sin(minAngle*Math.PI/180), my = 100 - 72*Math.cos(minAngle*Math.PI/180);
+  hh.setAttribute('x2', hx); hh.setAttribute('y2', hy);
+  mh.setAttribute('x2', mx); mh.setAttribute('y2', my);
+}
+
+// ============================================================
+// はり ドラッグ
+// ============================================================
+function onHandDrag(e) {
+  if (!dragTarget) return;
+  e.preventDefault();
+  const rect = svg.getBoundingClientRect();
+  const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  const y = e.touches ? e.touches[0].clientY : e.clientY;
+  let ang = Math.atan2(x-cx, -(y-cy)) * 180/Math.PI;
+  if (ang < 0) ang += 360;
+
+  if (dragTarget === 'min') {
+    handMin = Math.round(ang/6/granularity)*granularity % 60;
+  } else {
+    let hh = Math.round(ang/30) % 12;
+    if (hh === 0) hh = 12;
+    handHour = hh;
+  }
+  setHandAngles(handHour, handMin);
+}
+
+function onHandDragEnd() {
+  dragTarget = null;
+  window.removeEventListener('pointermove', onHandDrag);
+  window.removeEventListener('pointerup', onHandDragEnd);
+}
+
+// ============================================================
+// 数字えらびポップアップ
+// ============================================================
+function openNumPicker(target) {
+  numPickerTarget = target;
+  const grid = document.getElementById('num-grid');
+  grid.innerHTML = '';
+  document.getElementById('num-popup-title').textContent = target === 'hour' ? 'なんじ？' : 'なんふん？';
+  const values = target === 'hour'
+    ? Array.from({length:12}, (_,i) => i+1)
+    : Array.from({length: 60/granularity}, (_,i) => i*granularity);
+  values.forEach(v => {
+    const btn = document.createElement('button');
+    btn.textContent = target === 'hour' ? v : String(v).padStart(2,'0');
+    btn.onclick = () => selectNum(v);
+    grid.appendChild(btn);
+  });
+  document.getElementById('num-popup').classList.add('show');
+}
+function selectNum(v) {
+  if (numPickerTarget === 'hour') { ansHour = v; document.getElementById('ans-hour').textContent = v; }
+  else { ansMin = v; document.getElementById('ans-min').textContent = String(v).padStart(2,'0'); }
+  closeNumPicker();
+}
+function closeNumPicker() {
+  document.getElementById('num-popup').classList.remove('show');
+  numPickerTarget = null;
+}
+
+// ============================================================
+// 出題・判定
+// ============================================================
+function timeLabel(h, m) {
+  return `${h}じ${m===0 ? ' ちょうど' : m+'ふん'}`;
+}
+
+function nextProblem() {
+  const steps = Array.from({length: 60/granularity}, (_,i) => i*granularity);
+  curHour = Math.floor(Math.random()*12) + 1;
+  curMin = steps[Math.floor(Math.random()*steps.length)];
+  ansHour = null; ansMin = null;
+  handHour = 12; handMin = 0;
+  document.getElementById('ans-hour').textContent = '？';
+  document.getElementById('ans-min').textContent = '？';
+  setResult('', '');
+  document.getElementById('next-btn').style.display = 'none';
+
+  if (mode === 'read') {
+    setHandAngles(curHour, curMin);
+  } else if (mode === 'set') {
+    setHandAngles(handHour, handMin);
+    document.getElementById('prompt-time').textContent = timeLabel(curHour, curMin);
+  } else if (mode === 'elapse') {
+    const amounts = granularity === 1 ? [1,2,3,5,10,15] : [5,10,15,20,30];
+    elapseAmount = amounts[Math.floor(Math.random()*amounts.length)];
+    elapseDir = Math.random() < 0.5 ? 1 : -1;
+
+    let totalMin = ((curHour % 12) * 60 + curMin + elapseDir*elapseAmount + 720) % 720;
+    correctHour = Math.floor(totalMin / 60); if (correctHour === 0) correctHour = 12;
+    correctMin = totalMin % 60;
+
+    setHandAngles(curHour, curMin);
+    document.getElementById('prompt-label').textContent =
+      `${timeLabel(curHour, curMin)} の ${elapseAmount}ふん${elapseDir===1?'ご':'まえ'} は なんじなんぷん？`;
+    document.getElementById('prompt-time').textContent = '';
+  }
+}
+
+function setGranularity(g) {
+  granularity = g;
+  document.getElementById('gran-5').classList.toggle('sel', g===5);
+  document.getElementById('gran-1').classList.toggle('sel', g===1);
+  nextProblem();
+}
+
+function setResult(msg, cls) {
+  const el = document.getElementById('result-msg');
+  el.textContent = msg;
+  el.className = 'result-msg' + (cls ? ' ' + cls : '');
+}
+
+function renderStreak() {
+  const need = 3;
+  const pos = streak % need;
+  let paws = '';
+  for (let i=0;i<need;i++) paws += (i < pos ? '🐾' : '🔸');
+  document.getElementById('streak-paws').textContent = paws;
+}
+
+const ENC = ["すごい！","やったね！","じょうずだね！","かんぺき！","ばっちり！"];
+
+function checkAnswer() {
+  let correct;
+  if (mode === 'read' || mode === 'elapse') {
+    if (ansHour === null || ansMin === null) { setResult('じかんを えらんでね！', 'ng'); return; }
+    const targetH = mode === 'elapse' ? correctHour : curHour;
+    const targetM = mode === 'elapse' ? correctMin : curMin;
+    correct = ansHour === targetH && ansMin === targetM;
+  } else {
+    correct = (handHour === curHour || (handHour%12) === (curHour%12)) && handMin === curMin;
+  }
+
+  if (correct) {
+    streak++; starTotal++;
+    document.getElementById('star-count').textContent = starTotal;
+    saveProgress(); renderStreak();
+    setResult(ENC[Math.floor(Math.random()*ENC.length)] + ' 🎉', 'ok');
+  } else {
+    streak = 0; renderStreak();
+    setResult('おしい！もういちど みてみよう', 'ng');
+  }
+  document.getElementById('next-btn').style.display = 'inline-block';
+}
+
+// ============================================================
+// モード切り替え
+// ============================================================
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-read').classList.toggle('active', m==='read');
+  document.getElementById('mode-set').classList.toggle('active', m==='set');
+  document.getElementById('mode-elapse').classList.toggle('active', m==='elapse');
+  document.getElementById('prompt-wrap').style.display = (m==='set' || m==='elapse') ? 'block' : 'none';
+  document.getElementById('prompt-label').textContent = m==='set' ? 'この じかんに あわせてね' : '';
+  document.getElementById('answer-row').style.display = (m==='read' || m==='elapse') ? 'flex' : 'none';
+  nextProblem();
+}
+
+// ============================================================
+// 初期化
+// ============================================================
+buildClockFace();
+document.getElementById('star-count').textContent = starTotal;
+renderStreak();
+nextProblem();
+</script>
+</body>
+</html>
