@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>てがきチェック</title>
+<style>
+:root{
+  --pink:#ff6b9d;--pink-l:#ffe0ee;
+  --blue:#5ba8ff;--blue-l:#deeeff;
+  --yellow:#ffce47;--green:#47cc8a;
+  --gray:#aaa;--text:#333;
+  --bg:#fffdf5;--card:#fff;
+}
+*{box-sizing:border-box}
+body{
+  font-family:'Klee One','Hiragino Kaku Gothic ProN',sans-serif;
+  background:var(--bg);color:var(--text);
+  height:100dvh;display:flex;flex-direction:column;overflow:hidden;
+  margin:0;
+}
+header{
+  background:var(--pink);padding:6px 12px;
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+}
+header h1{color:#fff;font-size:1rem;flex:1;margin:0}
+.stars-total{
+  color:#fff;font-size:0.85rem;font-weight:bold;
+  background:rgba(255,255,255,0.25);padding:3px 10px;border-radius:12px;
+}
+
+.layout{flex:1;display:flex;overflow:hidden;min-height:0}
+.left-panel{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  padding:12px;gap:10px;overflow:auto;min-width:0;
+}
+.right-panel{
+  width:260px;flex-shrink:0;border-left:2px solid var(--pink-l);
+  display:flex;flex-direction:column;overflow:hidden;background:#fffaf7;
+}
+
+@media (max-width: 760px) {
+  .layout{ display:block !important; overflow-y:auto !important; height:auto !important; }
+  .left-panel{ display:flex !important; overflow:visible !important; max-height:none !important; margin-bottom:10px; }
+  .right-panel{ display:block !important; overflow:visible !important; width:100%; border-left:none; border-top:2px solid var(--pink-l); }
+  .row-scroll{ flex:none !important; max-height:260px !important; overflow-y:scroll !important; -webkit-overflow-scrolling:touch; }
+  body{ overflow-y:auto !important; height:auto !important; min-height:100dvh; }
+}
+
+/* もじ切り替え */
+.kind-toggle{
+  display:flex;width:100%;max-width:420px;border-radius:10px;overflow:hidden;
+  border:2px solid var(--pink-l);flex-shrink:0;
+}
+.kind-btn{
+  flex:1;padding:7px 6px;border:none;background:#fdf0f5;
+  font-family:inherit;font-size:0.75rem;font-weight:bold;
+  cursor:pointer;color:var(--gray);
+}
+.kind-btn.active{ background:var(--pink);color:#fff; }
+
+.prompt-wrap{ text-align:center;flex-shrink:0; }
+.prompt-label{ font-size:0.75rem;color:var(--gray);font-weight:bold; }
+.prompt-kana{ font-size:2.6rem;font-weight:bold;color:var(--pink);line-height:1.2; }
+
+.canvas-wrap{
+  position:relative;border-radius:14px;overflow:hidden;flex-shrink:0;
+  border:3px solid var(--pink-l);background:#fffdf5;touch-action:none;
+}
+canvas{ position:absolute;inset:0;width:100%;height:100%; }
+#cv-grid{ z-index:1; }
+#cv-ref{ z-index:2; }
+#cv-draw{ z-index:3; }
+
+.btn-row{ display:flex;gap:8px;flex-shrink:0; }
+.s-btn{
+  padding:8px 20px;border:none;border-radius:12px;color:#fff;
+  font-family:inherit;font-size:0.82rem;font-weight:bold;cursor:pointer;
+}
+.btn-gray{ background:#bbb; }
+.btn-pink{ background:var(--pink); }
+
+.result-msg{
+  font-size:1rem;font-weight:bold;min-height:1.6em;text-align:center;flex-shrink:0;
+}
+.result-msg.ok{ color:var(--green); }
+.result-msg.ng{ color:#e0995a; }
+
+.streak-row{
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+  background:var(--pink-l);padding:5px 14px;border-radius:14px;
+}
+.streak-label{ font-size:0.68rem;font-weight:bold;color:var(--pink); }
+#streak-paws{ font-size:0.9rem;letter-spacing:2px; }
+
+/* 右パネル：行リスト */
+.row-scroll{ flex:1;overflow-y:auto;padding:8px; }
+.row-title{
+  font-size:0.68rem;color:var(--gray);font-weight:bold;margin:8px 4px 3px;
+  padding-bottom:2px;border-bottom:1px solid #eee;
+}
+.gyou-grid{ display:grid;grid-template-columns:repeat(5,1fr);gap:4px; }
+.gyou-btn{
+  border:2px solid var(--pink-l);border-radius:7px;background:#fff;
+  font-family:inherit;font-size:0.95rem;font-weight:bold;color:var(--text);
+  cursor:pointer;padding:6px 2px;
+}
+.gyou-btn.sel{ background:var(--pink-l);border-color:var(--pink);color:var(--pink); }
+
+.loading{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:var(--gray);font-size:0.8rem;background:rgba(255,253,245,0.85);z-index:5;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>✏️ てがきチェック</h1>
+  <div class="stars-total">⭐ <span id="star-count">0</span></div>
+</header>
+
+<div class="layout">
+
+  <div class="left-panel">
+
+    <div class="kind-toggle">
+      <button class="kind-btn active" id="kind-hira" onclick="setKind('hiragana')">ひらがな</button>
+      <button class="kind-btn" id="kind-kata" onclick="setKind('katakana')">カタカナ</button>
+      <button class="kind-btn" id="kind-mix" onclick="setKind('mix')">まぜて</button>
+    </div>
+
+    <div class="prompt-wrap">
+      <div class="prompt-label">この もじを かいてね</div>
+      <div class="prompt-kana" id="prompt-kana">あ</div>
+    </div>
+
+    <div class="canvas-wrap" id="canvas-wrap">
+      <canvas id="cv-grid"></canvas>
+      <canvas id="cv-ref"></canvas>
+      <canvas id="cv-draw"></canvas>
+      <div class="loading" id="loading" style="display:none">よみこみ中…</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="s-btn btn-gray" onclick="clearDraw()">🗑 けす</button>
+      <button class="s-btn btn-pink" onclick="checkDraw()">✓ かくにんする</button>
+    </div>
+
+    <div class="result-msg" id="result-msg"></div>
+
+    <div class="streak-row">
+      <span class="streak-label">れんぞくせいかい</span>
+      <span id="streak-paws"></span>
+    </div>
+
+  </div>
+
+  <div class="right-panel">
+    <div class="row-scroll">
+      <div class="row-title">れんしゅうする行をえらぶ（まぜてタップでランダム）</div>
+      <div class="gyou-grid" id="gyou-grid"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// データ
+// ============================================================
+const CDN = 'https://cdn.jsdelivr.net/npm/kana-svg-data/dist';
+const VBOX = 1024;
+
+const GYOU = [
+  ['あ',['あ','い','う','え','お']],
+  ['か',['か','き','く','け','こ']],
+  ['さ',['さ','し','す','せ','そ']],
+  ['た',['た','ち','つ','て','と']],
+  ['な',['な','に','ぬ','ね','の']],
+  ['は',['は','ひ','ふ','へ','ほ']],
+  ['ま',['ま','み','む','め','も']],
+  ['や',['や','ゆ','よ']],
+  ['ら',['ら','り','る','れ','ろ']],
+  ['わ',['わ','を','ん']],
+];
+// ひらがな→カタカナ対応表
+const H2K = {
+  'あ':'ア','い':'イ','う':'ウ','え':'エ','お':'オ',
+  'か':'カ','き':'キ','く':'ク','け':'ケ','こ':'コ',
+  'さ':'サ','し':'シ','す':'ス','せ':'セ','そ':'ソ',
+  'た':'タ','ち':'チ','つ':'ツ','て':'テ','と':'ト',
+  'な':'ナ','に':'ニ','ぬ':'ヌ','ね':'ネ','の':'ノ',
+  'は':'ハ','ひ':'ヒ','ふ':'フ','へ':'ヘ','ほ':'ホ',
+  'ま':'マ','み':'ミ','む':'ム','め':'メ','も':'モ',
+  'や':'ヤ','ゆ':'ユ','よ':'ヨ',
+  'ら':'ラ','り':'リ','る':'ル','れ':'レ','ろ':'ロ',
+  'わ':'ワ','を':'ヲ','ん':'ン'
+};
+
+const ENC = ["すごい！","やったね！","じょうずだね！","かんぺき！","ばっちり！"];
+
+// ============================================================
+// 状態
+// ============================================================
+let kind = 'hiragana';      // 'hiragana' | 'katakana' | 'mix'
+let selGyou = null;         // 選択中の行（nullなら全部からランダム）
+let curChar = 'あ';
+let curData = null;         // フェッチした現在の文字データ(strokes/medians)
+let dataCache = {};         // key: "hiragana:あ" -> data
+let starTotal = 0;
+let streak = 0;
+let cvSize = 260;
+let drawing = false;
+let hasDrawn = false;
+
+try {
+  const s = localStorage.getItem('tegaki_stars_v1');
+  if (s) starTotal = parseInt(s, 10) || 0;
+} catch (e) {}
+
+function saveProgress() {
+  try { localStorage.setItem('tegaki_stars_v1', String(starTotal)); } catch (e) {}
+}
+
+const cvGrid = document.getElementById('cv-grid');
+const cvRef = document.getElementById('cv-ref');
+const cvDraw = document.getElementById('cv-draw');
+const wrap = document.getElementById('canvas-wrap');
+
+// ============================================================
+// サイズ
+// ============================================================
+function calcSize() {
+  const avail = Math.min(document.querySelector('.left-panel').clientWidth - 20, window.innerHeight * 0.42, 340);
+  cvSize = Math.max(180, Math.floor(avail));
+  wrap.style.width = cvSize + 'px';
+  wrap.style.height = cvSize + 'px';
+  [cvGrid, cvRef, cvDraw].forEach(c => { c.width = cvSize; c.height = cvSize; });
+  drawGridBackground();
+}
+window.addEventListener('resize', () => { calcSize(); });
+
+// 漢字ノートのような十字の補助線（中心を通る縦横の点線）
+function drawGridBackground() {
+  const ctx = cvGrid.getContext('2d');
+  ctx.clearRect(0, 0, cvSize, cvSize);
+  ctx.strokeStyle = '#ffd0e8';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 5]);
+  ctx.beginPath();
+  ctx.moveTo(cvSize/2, 0); ctx.lineTo(cvSize/2, cvSize);
+  ctx.moveTo(0, cvSize/2); ctx.lineTo(cvSize, cvSize/2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#f3e2ea';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, cvSize-1, cvSize-1);
+}
+
+// ============================================================
+// 文字データ取得
+// ============================================================
+async function fetchCharData(k, ch) {
+  const key = k + ':' + ch;
+  if (dataCache[key]) return dataCache[key];
+  const folder = k === 'katakana' ? 'katakana' : 'hiragana';
+  const url = `${CDN}/${folder}/${encodeURIComponent(ch)}.json`;
+  const res = await fetch(url);
+  const data = await res.json();
+  dataCache[key] = data;
+  return data;
+}
+
+// ============================================================
+// 描画（お手本は見せない・判定用に裏で使うだけ）
+// ============================================================
+function clearCanvas(cv) {
+  cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+}
+
+function setupDrawCanvas() {
+  const ctx = cvDraw.getContext('2d');
+  clearCanvas(cvDraw);
+  ctx.strokeStyle = '#ff6b9d';
+  ctx.lineWidth = Math.max(8, cvSize * 0.045);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  drawing = false;
+  hasDrawn = false;
+
+  const gpos = e => {
+    const r = cvDraw.getBoundingClientRect();
+    const cx = e.touches ? (e.touches[0]||e.changedTouches[0]).clientX : e.clientX;
+    const cy = e.touches ? (e.touches[0]||e.changedTouches[0]).clientY : e.clientY;
+    return { x: (cx - r.left) * (cvDraw.width / r.width), y: (cy - r.top) * (cvDraw.height / r.height) };
+  };
+
+  cvDraw.onpointerdown = e => {
+    e.preventDefault();
+    cvDraw.setPointerCapture(e.pointerId);
+    drawing = true; hasDrawn = true;
+    const p = gpos(e);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  };
+  cvDraw.onpointermove = e => {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = gpos(e);
+    ctx.lineTo(p.x, p.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  };
+  cvDraw.onpointerup = cvDraw.onpointercancel = () => { drawing = false; };
+}
+
+function clearDraw() {
+  setupDrawCanvas();
+  clearCanvas(cvRef);
+  setResult('', '');
+}
+
+// お手本を薄く重ねて見せる（不正解フィードバック用）
+// medians（芯線）ではなく strokes（実際の文字のかたち）を使って、フォントと同じ滑らかな形で表示する
+function showRefOverlay() {
+  const ctx = cvRef.getContext('2d');
+  clearCanvas(cvRef);
+  if (!curData || !curData.strokes) return;
+  const scale = cvSize / VBOX;
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.fillStyle = 'rgba(91,168,255,0.55)';
+  curData.strokes.forEach(s => {
+    const path = new Path2D(s.value);
+    ctx.fill(path);
+  });
+  ctx.restore();
+}
+
+// ============================================================
+// 形の一致度チェック（AIではなく、点の重なり具合で判定）
+// ============================================================
+function computeMatch(data, drawCanvas) {
+  const SIZE = 56;
+  const off1 = document.createElement('canvas'); off1.width = SIZE; off1.height = SIZE;
+  const ctx1 = off1.getContext('2d');
+  ctx1.strokeStyle = '#000'; ctx1.lineWidth = 5; ctx1.lineCap = 'round'; ctx1.lineJoin = 'round';
+  const scale = SIZE / VBOX;
+  data.medians.forEach(m => {
+    const pts = m.value;
+    ctx1.beginPath();
+    pts.forEach(([x,y], i) => {
+      const px = x*scale, py = y*scale;
+      if (i===0) ctx1.moveTo(px,py); else ctx1.lineTo(px,py);
+    });
+    ctx1.stroke();
+  });
+  const d1 = ctx1.getImageData(0,0,SIZE,SIZE).data;
+
+  const off2 = document.createElement('canvas'); off2.width = SIZE; off2.height = SIZE;
+  const ctx2 = off2.getContext('2d');
+  ctx2.drawImage(drawCanvas, 0, 0, SIZE, SIZE);
+  const d2 = ctx2.getImageData(0,0,SIZE,SIZE).data;
+
+  let a=0,b=0,both=0;
+  for (let i=0;i<SIZE*SIZE;i++){
+    const inkA = d1[i*4+3] > 40;
+    const inkB = d2[i*4+3] > 40;
+    if (inkA) a++;
+    if (inkB) b++;
+    if (inkA && inkB) both++;
+  }
+  if (a+b-both === 0) return 0;
+  return both / (a+b-both);
+}
+
+function setResult(msg, cls) {
+  const el = document.getElementById('result-msg');
+  el.textContent = msg;
+  el.className = 'result-msg' + (cls ? ' ' + cls : '');
+}
+
+function renderStreak() {
+  const need = 3;
+  const pos = streak % need;
+  let paws = '';
+  for (let i=0;i<need;i++) paws += (i < pos ? '🐾' : '🔸');
+  document.getElementById('streak-paws').textContent = paws;
+}
+
+async function checkDraw() {
+  if (!hasDrawn) { setResult('ゆびで かいてみてね！', 'ng'); return; }
+  if (!curData) return;
+  const iou = computeMatch(curData, cvDraw);
+
+  if (iou >= 0.30) {
+    streak++;
+    starTotal++;
+    document.getElementById('star-count').textContent = starTotal;
+    saveProgress();
+    renderStreak();
+    const msg = ENC[Math.floor(Math.random()*ENC.length)];
+    setResult(msg + ' 🎉', 'ok');
+    setTimeout(() => { loadNewChar(); }, 1200);
+  } else {
+    streak = 0;
+    renderStreak();
+    setResult('おしい！せいかいの形を かさねて みるね', 'ng');
+    showRefOverlay();
+  }
+}
+
+// ============================================================
+// 文字の選択・読み込み
+// ============================================================
+function allCharsFlat() {
+  const chars = [];
+  GYOU.forEach(([, list]) => chars.push(...list));
+  return chars;
+}
+
+function pickChar() {
+  const pool = selGyou ? GYOU.find(g => g[0] === selGyou)[1] : allCharsFlat();
+  let ch;
+  do { ch = pool[Math.floor(Math.random()*pool.length)]; } while (ch === curChar && pool.length > 1);
+  return ch;
+}
+
+function pickKindForChar() {
+  if (kind === 'mix') return Math.random() < 0.5 ? 'hiragana' : 'katakana';
+  return kind;
+}
+
+async function loadNewChar() {
+  const hiraChar = pickChar();
+  curChar = hiraChar;
+  const useKind = pickKindForChar();
+  const displayChar = useKind === 'katakana' ? H2K[hiraChar] : hiraChar;
+
+  document.getElementById('prompt-kana').textContent = displayChar;
+  document.getElementById('loading').style.display = 'flex';
+  clearDraw();
+
+  try {
+    curData = await fetchCharData(useKind, displayChar);
+  } catch (e) {
+    curData = null;
+  }
+  document.getElementById('loading').style.display = 'none';
+}
+
+function setKind(k) {
+  kind = k;
+  document.getElementById('kind-hira').classList.toggle('active', k==='hiragana');
+  document.getElementById('kind-kata').classList.toggle('active', k==='katakana');
+  document.getElementById('kind-mix').classList.toggle('active', k==='mix');
+  loadNewChar();
+}
+
+function buildGyouGrid() {
+  const grid = document.getElementById('gyou-grid');
+  grid.innerHTML = '';
+  const allBtn = document.createElement('button');
+  allBtn.className = 'gyou-btn sel';
+  allBtn.textContent = 'ぜんぶ';
+  allBtn.onclick = () => selectGyou(null, allBtn);
+  grid.appendChild(allBtn);
+  GYOU.forEach(([label]) => {
+    const btn = document.createElement('button');
+    btn.className = 'gyou-btn';
+    btn.textContent = label + '行';
+    btn.onclick = () => selectGyou(label, btn);
+    grid.appendChild(btn);
+  });
+}
+
+function selectGyou(label, btnEl) {
+  selGyou = label;
+  document.querySelectorAll('.gyou-btn').forEach(b => b.classList.remove('sel'));
+  btnEl.classList.add('sel');
+  loadNewChar();
+}
+
+// ============================================================
+// 初期化
+// ============================================================
+calcSize();
+buildGyouGrid();
+document.getElementById('star-count').textContent = starTotal;
+renderStreak();
+loadNewChar();
+</script>
+</body>
+</html>
