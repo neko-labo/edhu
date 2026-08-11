@@ -47,11 +47,11 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 
 /* 単位トグル（5分/1分） */
 .gran-toggle{
-  display:flex;gap:8px;
+  display:flex;gap:8px;width:100%;
 }
 .gran-btn{
-  padding:6px 14px;border:2px solid #ddd;border-radius:14px;background:#fff;
-  font-family:inherit;font-size:0.7rem;font-weight:bold;color:var(--gray);cursor:pointer;
+  flex:1;padding:7px 6px;border:2px solid #ddd;border-radius:14px;background:#fff;
+  font-family:inherit;font-size:0.75rem;font-weight:bold;color:var(--gray);cursor:pointer;
 }
 .gran-btn.sel{ background:var(--yellow);border-color:#e6b800;color:#333; }
 
@@ -63,8 +63,13 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 /* とけい */
 .clock-wrap{ position:relative;width:260px;height:260px;touch-action:none; }
 svg{ width:100%;height:100%; }
-.hand{ cursor:grab; }
+.hand{ cursor:default; }
+.hand.draggable{ cursor:grab; }
 .hand.dragging{ cursor:grabbing; }
+
+/* アニメーションボタン */
+.animate-row{ display:none; }
+.btn-anim{ background:var(--blue); }
 
 /* 読み取りモードの答え選択 */
 .answer-row{ display:flex;gap:14px;align-items:center; }
@@ -82,6 +87,7 @@ svg{ width:100%;height:100%; }
   padding:10px 24px;border:none;border-radius:12px;color:#fff;
   font-family:inherit;font-size:0.9rem;font-weight:bold;cursor:pointer;
 }
+.s-btn:disabled{ opacity:0.5;cursor:default; }
 .btn-pink{ background:var(--pink); }
 .btn-gray{ background:#bbb; }
 
@@ -128,15 +134,16 @@ svg{ width:100%;height:100%; }
 
 <div class="wrap">
 
-  <div class="mode-toggle">
+  <div class="mode-toggle" id="mode-toggle">
     <button class="mode-btn active" id="mode-read" onclick="setMode('read')">👀 よみとる</button>
     <button class="mode-btn" id="mode-set" onclick="setMode('set')">✋ はりを うごかす</button>
     <button class="mode-btn" id="mode-elapse" onclick="setMode('elapse')">⏱ なんぷんご・まえ</button>
   </div>
 
-  <div class="gran-toggle">
-    <button class="gran-btn sel" id="gran-5" onclick="setGranularity(5)">5ふん たんい</button>
-    <button class="gran-btn" id="gran-1" onclick="setGranularity(1)">1ふん たんい</button>
+  <div class="gran-toggle" id="diff-toggle">
+    <button class="gran-btn sel" id="diff-easy" onclick="setDifficulty('easy')">かんたん</button>
+    <button class="gran-btn" id="diff-normal" onclick="setDifficulty('normal')">ふつう</button>
+    <button class="gran-btn" id="diff-hard" onclick="setDifficulty('hard')">むずかしい</button>
   </div>
 
   <div class="prompt-wrap" id="prompt-wrap" style="display:none">
@@ -146,6 +153,10 @@ svg{ width:100%;height:100%; }
 
   <div class="clock-wrap" id="clock-wrap">
     <svg viewBox="0 0 200 200" id="clock-svg"></svg>
+  </div>
+
+  <div class="btn-row animate-row" id="animate-row">
+    <button class="s-btn btn-anim" id="animate-btn" onclick="animateElapse()">▶ うごかして みる</button>
   </div>
 
   <div class="answer-row" id="answer-row">
@@ -183,19 +194,21 @@ svg{ width:100%;height:100%; }
 // ============================================================
 // 状態
 // ============================================================
+let difficulty = 'easy';     // 'easy'(30ふん) | 'normal'(5ふん) | 'hard'(1ふん)
 let mode = 'read';           // 'read' | 'set' | 'elapse'
-let granularity = 5;         // 5 | 1（分の単位）
 let curHour = 3, curMin = 0; // 出題（読み取り）/ 正解（はり動かし・けいか）の時刻
 let ansHour = null, ansMin = null; // 読み取り・けいかモードで選んだ答え
-let handHour = 12, handMin = 0;    // はり動かしモードでユーザーが置いた位置
-let dragTarget = null;       // 'hour' | 'min' | null
+let handTotalMin = 0;        // はり動かしモード：ユーザーが置いた位置（12:00 からの分・連続値）
+let dragging = false;
+let dragRawTotal = 0, lastPointerAngle = 0;
 let numPickerTarget = null;
 let starTotal = 0;
 let streak = 0;
 let elapseAmount = 5;        // けいかモード：なんぷん
 let elapseDir = 1;           // けいかモード：1=あと -1=まえ
-let startHourAngle = 0, startMinAngle = 0; // けいかモード：うごかす前の はり の角度（アーク表示用）
 let correctHour = 0, correctMin = 0; // けいかモードの正解
+let elapseAnimGen = 0;       // けいかアニメーションの世代（古いアニメを打ち切るため）
+let animating = false;
 
 try {
   const s = localStorage.getItem('tokei_stars_v1');
@@ -209,6 +222,13 @@ const svg = document.getElementById('clock-svg');
 const NS = 'http://www.w3.org/2000/svg';
 
 // ============================================================
+// ユーティリティ
+// ============================================================
+function effGran() { return { easy:30, normal:5, hard:1 }[difficulty]; }
+function hm2total(h, m) { return (h % 12) * 60 + m; }       // 0-719
+function normMin(t) { t = t % 720; if (t < 0) t += 720; return t; }
+
+// ============================================================
 // 時計の文字盤を描く（固定部分）
 // ============================================================
 function buildClockFace() {
@@ -217,6 +237,14 @@ function buildClockFace() {
   face.setAttribute('cx',100); face.setAttribute('cy',100); face.setAttribute('r',96);
   face.setAttribute('fill','#fffdf5'); face.setAttribute('stroke','#ff6b9d'); face.setAttribute('stroke-width','4');
   svg.appendChild(face);
+
+  // けいか経過をあらわす扇形（ticks/数字より下に描いて、数字が読めるようにする）
+  const arc = document.createElementNS(NS,'path');
+  arc.setAttribute('id','elapse-arc');
+  arc.setAttribute('d','');
+  arc.setAttribute('fill','var(--yellow)');
+  arc.setAttribute('fill-opacity','0.35');
+  svg.appendChild(arc);
 
   // 5分ごとの目盛り
   for (let i = 0; i < 60; i++) {
@@ -244,7 +272,7 @@ function buildClockFace() {
     svg.appendChild(t);
   }
 
-  // 針（あとで角度更新）
+  // 針
   const hourHand = document.createElementNS(NS,'line');
   hourHand.setAttribute('id','hand-hour');
   hourHand.setAttribute('class','hand');
@@ -259,61 +287,127 @@ function buildClockFace() {
   minHand.setAttribute('stroke','#ff6b9d'); minHand.setAttribute('stroke-width','4'); minHand.setAttribute('stroke-linecap','round');
   svg.appendChild(minHand);
 
+  // 長針だけ、太い当たり判定（つかみやすくするための透明な線）
+  const minHit = document.createElementNS(NS,'line');
+  minHit.setAttribute('id','hand-min-hit');
+  minHit.setAttribute('class','hand');
+  minHit.setAttribute('x1',100); minHit.setAttribute('y1',100);
+  minHit.setAttribute('stroke','transparent'); minHit.setAttribute('stroke-width','26'); minHit.setAttribute('stroke-linecap','round');
+  svg.appendChild(minHit);
+
   const center = document.createElementNS(NS,'circle');
   center.setAttribute('cx',100); center.setAttribute('cy',100); center.setAttribute('r',5);
   center.setAttribute('fill','#333');
   svg.appendChild(center);
 
-  // はり動かしモード用のドラッグ判定エリア（見えないが広めに取る）
-  ['hand-hour','hand-min'].forEach(id => {
-    document.getElementById(id).addEventListener('pointerdown', e => {
-      if (mode !== 'set') return;
-      e.preventDefault();
-      dragTarget = id === 'hand-hour' ? 'hour' : 'min';
-      window.addEventListener('pointermove', onHandDrag);
-      window.addEventListener('pointerup', onHandDragEnd);
-    });
-  });
+  // はり動かしモード用のドラッグ（長針のみ。短針は長針に自動で連動する）
+  minHit.addEventListener('pointerdown', onMinHandPointerDown);
 }
 
-function setHandAngles(h, m) {
-  const hourAngle = ((h % 12) * 30);
-  const minAngle = (m * 6);
+// totalMin（12:00からの連続した分）から長針・短針を両方連動して描画する
+function renderHands(totalMin) {
+  const t = normMin(totalMin);
+  const hourAngle = t * 0.5;      // 720分で1周
+  const minAngle = (t % 60) * 6;  // 60分で1周
   const hh = document.getElementById('hand-hour');
   const mh = document.getElementById('hand-min');
+  const mhHit = document.getElementById('hand-min-hit');
   const hx = 100 + 45*Math.sin(hourAngle*Math.PI/180), hy = 100 - 45*Math.cos(hourAngle*Math.PI/180);
   const mx = 100 + 72*Math.sin(minAngle*Math.PI/180), my = 100 - 72*Math.cos(minAngle*Math.PI/180);
   hh.setAttribute('x2', hx); hh.setAttribute('y2', hy);
   mh.setAttribute('x2', mx); mh.setAttribute('y2', my);
+  mhHit.setAttribute('x2', mx); mhHit.setAttribute('y2', my);
+}
+
+function setArcPath(d, color) {
+  const p = document.getElementById('elapse-arc');
+  p.setAttribute('d', d || '');
+  if (color) p.setAttribute('fill', color);
+}
+
+function arcPathStr(cx, cy, r, angle1, angle2, sweepFlag, largeArcFlag) {
+  const toXY = a => [cx + r*Math.sin(a*Math.PI/180), cy - r*Math.cos(a*Math.PI/180)];
+  const [x1,y1] = toXY(angle1), [x2,y2] = toXY(angle2);
+  return `M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArcFlag} ${sweepFlag} ${x2.toFixed(2)},${y2.toFixed(2)} Z`;
 }
 
 // ============================================================
-// はり ドラッグ
+// はり ドラッグ（長針のみ／短針は自動連動）
 // ============================================================
-function onHandDrag(e) {
-  if (!dragTarget) return;
-  e.preventDefault();
+function pointerAngle(e) {
   const rect = svg.getBoundingClientRect();
   const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
   const x = e.touches ? e.touches[0].clientX : e.clientX;
   const y = e.touches ? e.touches[0].clientY : e.clientY;
   let ang = Math.atan2(x-cx, -(y-cy)) * 180/Math.PI;
   if (ang < 0) ang += 360;
+  return ang;
+}
 
-  if (dragTarget === 'min') {
-    handMin = Math.round(ang/6/granularity)*granularity % 60;
-  } else {
-    let hh = Math.round(ang/30) % 12;
-    if (hh === 0) hh = 12;
-    handHour = hh;
-  }
-  setHandAngles(handHour, handMin);
+function onMinHandPointerDown(e) {
+  if (mode !== 'set') return;
+  e.preventDefault();
+  dragging = true;
+  lastPointerAngle = pointerAngle(e);
+  dragRawTotal = handTotalMin;
+  window.addEventListener('pointermove', onHandDrag);
+  window.addEventListener('pointerup', onHandDragEnd);
+}
+
+function onHandDrag(e) {
+  if (!dragging) return;
+  e.preventDefault();
+  const ang = pointerAngle(e);
+  let delta = ang - lastPointerAngle;
+  delta = ((delta + 540) % 360) - 180; // 一番近い回転方向（-180〜180）に正規化
+  dragRawTotal += delta / 6;           // 6度=1分
+  lastPointerAngle = ang;
+  const gran = effGran();
+  handTotalMin = Math.round(dragRawTotal / gran) * gran;
+  renderHands(handTotalMin);
 }
 
 function onHandDragEnd() {
-  dragTarget = null;
+  dragging = false;
   window.removeEventListener('pointermove', onHandDrag);
   window.removeEventListener('pointerup', onHandDragEnd);
+}
+
+// ============================================================
+// けいかモード：うごかしてみる（アニメーション + 色の扇形）
+// ============================================================
+function animateElapse() {
+  if (animating) return;
+  animating = true;
+  const btn = document.getElementById('animate-btn');
+  btn.disabled = true;
+
+  const myGen = elapseAnimGen;
+  const startTotalOverall = hm2total(curHour, curMin);
+  const startMinAngle = (curMin % 60) * 6;
+  const dir = elapseDir;
+  const amount = elapseAmount;
+  const color = dir === 1 ? 'var(--yellow)' : 'var(--blue)';
+  const durationMs = Math.max(700, amount * 90);
+  const t0 = performance.now();
+
+  function frame(now) {
+    if (myGen !== elapseAnimGen) return; // 次の問題に進んでいたら打ち切り
+    const p = Math.min(1, (now - t0) / durationMs);
+    const sweptMin = amount * p;
+    renderHands(startTotalOverall + dir * sweptMin);
+    const angle2 = startMinAngle + dir * sweptMin * 6;
+    const largeArc = Math.abs(angle2 - startMinAngle) > 180 ? 1 : 0;
+    const sweepFlag = dir === 1 ? 1 : 0;
+    setArcPath(arcPathStr(100, 100, 80, startMinAngle, angle2, sweepFlag, largeArc), color);
+    if (p < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      animating = false;
+      btn.disabled = false;
+    }
+  }
+  requestAnimationFrame(frame);
 }
 
 // ============================================================
@@ -324,9 +418,10 @@ function openNumPicker(target) {
   const grid = document.getElementById('num-grid');
   grid.innerHTML = '';
   document.getElementById('num-popup-title').textContent = target === 'hour' ? 'なんじ？' : 'なんふん？';
+  const gran = effGran();
   const values = target === 'hour'
     ? Array.from({length:12}, (_,i) => i+1)
-    : Array.from({length: 60/granularity}, (_,i) => i*granularity);
+    : Array.from({length: 60/gran}, (_,i) => i*gran);
   values.forEach(v => {
     const btn = document.createElement('button');
     btn.textContent = target === 'hour' ? v : String(v).padStart(2,'0');
@@ -349,27 +444,37 @@ function closeNumPicker() {
 // 出題・判定
 // ============================================================
 function timeLabel(h, m) {
+  if (difficulty === 'easy') {
+    return m === 30 ? `${h}じはん` : `${h}じ ちょうど`;
+  }
   return `${h}じ${m===0 ? ' ちょうど' : m+'ふん'}`;
 }
 
 function nextProblem() {
-  const steps = Array.from({length: 60/granularity}, (_,i) => i*granularity);
+  elapseAnimGen++;           // 進行中のアニメーションを打ち切る
+  animating = false;
+  setArcPath('');
+  const animBtn = document.getElementById('animate-btn');
+  if (animBtn) animBtn.disabled = false;
+
+  const gran = effGran();
+  const steps = Array.from({length: 60/gran}, (_,i) => i*gran);
   curHour = Math.floor(Math.random()*12) + 1;
   curMin = steps[Math.floor(Math.random()*steps.length)];
   ansHour = null; ansMin = null;
-  handHour = 12; handMin = 0;
+  handTotalMin = 0;
   document.getElementById('ans-hour').textContent = '？';
   document.getElementById('ans-min').textContent = '？';
   setResult('', '');
   document.getElementById('next-btn').style.display = 'none';
 
   if (mode === 'read') {
-    setHandAngles(curHour, curMin);
+    renderHands(hm2total(curHour, curMin));
   } else if (mode === 'set') {
-    setHandAngles(handHour, handMin);
+    renderHands(0);
     document.getElementById('prompt-time').textContent = timeLabel(curHour, curMin);
   } else if (mode === 'elapse') {
-    const amounts = granularity === 1 ? [1,2,3,5,10,15] : [5,10,15,20,30];
+    const amounts = gran === 30 ? [30] : gran === 1 ? [1,2,3,5,10,15] : [5,10,15,20,30];
     elapseAmount = amounts[Math.floor(Math.random()*amounts.length)];
     elapseDir = Math.random() < 0.5 ? 1 : -1;
 
@@ -377,17 +482,18 @@ function nextProblem() {
     correctHour = Math.floor(totalMin / 60); if (correctHour === 0) correctHour = 12;
     correctMin = totalMin % 60;
 
-    setHandAngles(curHour, curMin);
+    renderHands(hm2total(curHour, curMin));
     document.getElementById('prompt-label').textContent =
       `${timeLabel(curHour, curMin)} の ${elapseAmount}ふん${elapseDir===1?'ご':'まえ'} は なんじなんぷん？`;
     document.getElementById('prompt-time').textContent = '';
   }
 }
 
-function setGranularity(g) {
-  granularity = g;
-  document.getElementById('gran-5').classList.toggle('sel', g===5);
-  document.getElementById('gran-1').classList.toggle('sel', g===1);
+function setDifficulty(d) {
+  difficulty = d;
+  document.getElementById('diff-easy').classList.toggle('sel', d==='easy');
+  document.getElementById('diff-normal').classList.toggle('sel', d==='normal');
+  document.getElementById('diff-hard').classList.toggle('sel', d==='hard');
   nextProblem();
 }
 
@@ -415,7 +521,7 @@ function checkAnswer() {
     const targetM = mode === 'elapse' ? correctMin : curMin;
     correct = ansHour === targetH && ansMin === targetM;
   } else {
-    correct = (handHour === curHour || (handHour%12) === (curHour%12)) && handMin === curMin;
+    correct = normMin(handTotalMin) === hm2total(curHour, curMin);
   }
 
   if (correct) {
@@ -441,6 +547,7 @@ function setMode(m) {
   document.getElementById('prompt-wrap').style.display = (m==='set' || m==='elapse') ? 'block' : 'none';
   document.getElementById('prompt-label').textContent = m==='set' ? 'この じかんに あわせてね' : '';
   document.getElementById('answer-row').style.display = (m==='read' || m==='elapse') ? 'flex' : 'none';
+  document.getElementById('animate-row').style.display = (m==='elapse') ? 'flex' : 'none';
   nextProblem();
 }
 
@@ -450,7 +557,7 @@ function setMode(m) {
 buildClockFace();
 document.getElementById('star-count').textContent = starTotal;
 renderStreak();
-nextProblem();
+setMode('read');
 </script>
 </body>
 </html>
