@@ -73,13 +73,17 @@ canvas{ position:absolute;inset:0;width:100%;height:100%; }
 #cv-ref{ z-index:2; }
 #cv-draw{ z-index:3; }
 
-.btn-row{ display:flex;gap:8px;flex-shrink:0; }
+.btn-row{ display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:center; }
 .s-btn{
-  padding:8px 20px;border:none;border-radius:12px;color:#fff;
-  font-family:inherit;font-size:0.82rem;font-weight:bold;cursor:pointer;
+  padding:8px 16px;border:none;border-radius:12px;color:#fff;
+  font-family:inherit;font-size:0.8rem;font-weight:bold;cursor:pointer;
 }
 .btn-gray{ background:#bbb; }
 .btn-pink{ background:var(--pink); }
+.btn-blue{ background:var(--blue); }
+.btn-blue.on{ background:var(--green); }
+.btn-yellow{ background:var(--yellow);color:#7a5b00; }
+.btn-yellow.on{ background:var(--green);color:#fff; }
 
 .result-msg{
   font-size:1rem;font-weight:bold;min-height:1.6em;text-align:center;flex-shrink:0;
@@ -145,6 +149,8 @@ canvas{ position:absolute;inset:0;width:100%;height:100%; }
 
     <div class="btn-row">
       <button class="s-btn btn-gray" onclick="clearDraw()">🗑 けす</button>
+      <button class="s-btn btn-blue" id="ref-toggle-btn" onclick="toggleRef()">👀 おてほん</button>
+      <button class="s-btn btn-yellow" id="num-toggle-btn" onclick="toggleNumbers()">① ばんごう</button>
       <button class="s-btn btn-pink" onclick="checkDraw()">✓ かくにんする</button>
     </div>
 
@@ -214,6 +220,8 @@ let streak = 0;
 let cvSize = 260;
 let drawing = false;
 let hasDrawn = false;
+let showRef = false;       // お手本を常時表示するかどうか
+let showNumbers = false;   // 書き順の番号だけを常時表示するかどうか
 
 try {
   const s = localStorage.getItem('tegaki_stars_v1');
@@ -316,15 +324,39 @@ function setupDrawCanvas() {
 
 function clearDraw() {
   setupDrawCanvas();
-  clearCanvas(cvRef);
+  renderOverlay();
   setResult('', '');
 }
 
-// お手本を薄く重ねて見せる（不正解フィードバック用）
-// medians（芯線）ではなく strokes（実際の文字のかたち）を使って、フォントと同じ滑らかな形で表示する
-function showRefOverlay() {
-  const ctx = cvRef.getContext('2d');
+// お手本の表示・非表示を切り替える
+function toggleRef() {
+  showRef = !showRef;
+  const btn = document.getElementById('ref-toggle-btn');
+  btn.classList.toggle('on', showRef);
+  btn.textContent = showRef ? '🙈 かくす' : '👀 おてほん';
+  renderOverlay();
+}
+
+// 書き順の番号だけを表示・非表示を切り替える（アニメーションなし）
+function toggleNumbers() {
+  showNumbers = !showNumbers;
+  const btn = document.getElementById('num-toggle-btn');
+  btn.classList.toggle('on', showNumbers);
+  btn.textContent = showNumbers ? '🙈 かくす' : '① ばんごう';
+  renderOverlay();
+}
+
+// お手本・書き順番号をまとめて描画する（トグル状態に応じて重ね合わせる）
+function renderOverlay(forceRef) {
   clearCanvas(cvRef);
+  if (showRef || forceRef) drawRefShape();
+  if (showNumbers) drawStrokeNumbersStatic();
+}
+
+// お手本の形（塗りつぶし）を描画。medians ではなく strokes（実際の文字のかたち）を使って、
+// フォントと同じ滑らかな形で表示する
+function drawRefShape() {
+  const ctx = cvRef.getContext('2d');
   if (!curData || !curData.strokes) return;
   const scale = cvSize / VBOX;
   ctx.save();
@@ -335,6 +367,43 @@ function showRefOverlay() {
     ctx.fill(path);
   });
   ctx.restore();
+}
+
+// 各画の始点に番号バッジだけを静止表示（アニメーションなし）
+// medians の id は "1a"/"1b" のように、1つの画を描画用に複数パスへ
+// 分割している場合がある（例:「み」の1画目はループ部分で1a/1bに分割）。
+// 末尾のアルファベットを除いた番号でグループ化し、実際の画数・始点で番号を振る。
+function strokeGroups() {
+  if (!curData || !curData.medians) return [];
+  const groups = [];
+  const seen = new Set();
+  curData.medians.forEach(m => {
+    const key = String(m.id).replace(/[a-z]+$/i, '');
+    if (!seen.has(key) && m.value && m.value.length) {
+      seen.add(key);
+      groups.push(m.value[0]);
+    }
+  });
+  return groups;
+}
+
+function drawStrokeNumbersStatic() {
+  const starts = strokeGroups();
+  if (!starts.length) return;
+  const ctx = cvRef.getContext('2d');
+  const scale = cvSize / VBOX;
+  starts.forEach(([x, y], i) => {
+    const px = x * scale, py = y * scale;
+    ctx.beginPath();
+    ctx.arc(px, py, cvSize * 0.045, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,206,71,0.95)';
+    ctx.fill();
+    ctx.fillStyle = '#7a5b00';
+    ctx.font = 'bold ' + Math.round(cvSize * 0.08) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1), px, py);
+  });
 }
 
 // ============================================================
@@ -406,7 +475,7 @@ async function checkDraw() {
     streak = 0;
     renderStreak();
     setResult('おしい！せいかいの形を かさねて みるね', 'ng');
-    showRefOverlay();
+    renderOverlay(true); // トグルOFFでも正解の形は必ず見せる
   }
 }
 
@@ -447,6 +516,7 @@ async function loadNewChar() {
     curData = null;
   }
   document.getElementById('loading').style.display = 'none';
+  renderOverlay();
 }
 
 function setKind(k) {
