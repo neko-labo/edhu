@@ -55,13 +55,20 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 }
 .gran-btn.sel{ background:var(--yellow);border-color:#e6b800;color:#333; }
 
+/* 分の数字ガイド 表示/非表示トグル */
+.guide-btn{
+  padding:7px 16px;border:2px solid #ddd;border-radius:14px;background:#fff;
+  font-family:inherit;font-size:0.75rem;font-weight:bold;color:var(--gray);cursor:pointer;
+}
+.guide-btn.on{ background:var(--green);border-color:#2fa46f;color:#fff; }
+
 /* 問題文 */
 .prompt-wrap{ text-align:center; }
 .prompt-label{ font-size:0.78rem;color:var(--gray);font-weight:bold; }
 .prompt-time{ font-size:1.8rem;font-weight:bold;color:var(--pink); }
 
 /* とけい */
-.clock-wrap{ position:relative;width:260px;height:260px;touch-action:none; }
+.clock-wrap{ position:relative;width:291px;height:291px;touch-action:none;margin-top:4px; }
 svg{ width:100%;height:100%; }
 .hand{ cursor:default; }
 .hand.draggable{ cursor:grab; }
@@ -146,13 +153,15 @@ svg{ width:100%;height:100%; }
     <button class="gran-btn" id="diff-hard" onclick="setDifficulty('hard')">むずかしい</button>
   </div>
 
+  <button class="guide-btn on" id="guide-toggle-btn" onclick="toggleMinuteGuide()">🔢 ふんの すうじガイド：ひょうじ</button>
+
   <div class="prompt-wrap" id="prompt-wrap" style="display:none">
     <div class="prompt-label" id="prompt-label">この じかんに あわせてね</div>
     <div class="prompt-time" id="prompt-time">3じ15ふん</div>
   </div>
 
   <div class="clock-wrap" id="clock-wrap">
-    <svg viewBox="0 0 200 200" id="clock-svg"></svg>
+    <svg viewBox="0 0 224 224" id="clock-svg"></svg>
   </div>
 
   <div class="btn-row animate-row" id="animate-row">
@@ -196,6 +205,7 @@ svg{ width:100%;height:100%; }
 // ============================================================
 let difficulty = 'easy';     // 'easy'(30ふん) | 'normal'(5ふん) | 'hard'(1ふん)
 let mode = 'read';           // 'read' | 'set' | 'elapse'
+let showMinuteGuide = true;  // 分の数字ガイド（5,10,…55）の表示/非表示
 let curHour = 3, curMin = 0; // 出題（読み取り）/ 正解（はり動かし・けいか）の時刻
 let ansHour = null, ansMin = null; // 読み取り・けいかモードで選んだ答え
 let handTotalMin = 0;        // はり動かしモード：ユーザーが置いた位置（12:00 からの分・連続値）
@@ -234,7 +244,7 @@ function normMin(t) { t = t % 720; if (t < 0) t += 720; return t; }
 function buildClockFace() {
   svg.innerHTML = '';
   const face = document.createElementNS(NS,'circle');
-  face.setAttribute('cx',100); face.setAttribute('cy',100); face.setAttribute('r',96);
+  face.setAttribute('cx',112); face.setAttribute('cy',112); face.setAttribute('r',96);
   face.setAttribute('fill','#fffdf5'); face.setAttribute('stroke','#ff6b9d'); face.setAttribute('stroke-width','4');
   svg.appendChild(face);
 
@@ -246,13 +256,13 @@ function buildClockFace() {
   arc.setAttribute('fill-opacity','0.35');
   svg.appendChild(arc);
 
-  // 5分ごとの目盛り
+  // 5分ごとの目盛り（もとのサイズのまま）
   for (let i = 0; i < 60; i++) {
     const ang = i*6*Math.PI/180;
     const isHour = i % 5 === 0;
     const r1 = isHour ? 82 : 88;
-    const x1 = 100 + r1*Math.sin(ang), y1 = 100 - r1*Math.cos(ang);
-    const x2 = 100 + 92*Math.sin(ang), y2 = 100 - 92*Math.cos(ang);
+    const x1 = 112 + r1*Math.sin(ang), y1 = 112 - r1*Math.cos(ang);
+    const x2 = 112 + 92*Math.sin(ang), y2 = 112 - 92*Math.cos(ang);
     const tick = document.createElementNS(NS,'line');
     tick.setAttribute('x1',x1); tick.setAttribute('y1',y1);
     tick.setAttribute('x2',x2); tick.setAttribute('y2',y2);
@@ -260,10 +270,11 @@ function buildClockFace() {
     tick.setAttribute('stroke-width', isHour ? 2.5 : 1);
     svg.appendChild(tick);
   }
-  // 数字
+
+  // 数字（時）（もとのサイズのまま）
   for (let h = 1; h <= 12; h++) {
     const ang = h*30*Math.PI/180;
-    const x = 100 + 68*Math.sin(ang), y = 100 - 68*Math.cos(ang);
+    const x = 112 + 68*Math.sin(ang), y = 112 - 68*Math.cos(ang);
     const t = document.createElementNS(NS,'text');
     t.setAttribute('x',x); t.setAttribute('y',y+6);
     t.setAttribute('text-anchor','middle');
@@ -272,18 +283,35 @@ function buildClockFace() {
     svg.appendChild(t);
   }
 
-  // 針
+  // 分の数字ガイド（0,5,10…55）。文字盤のすぐ外側、細いリングに表示。1時間=60ふん の理解を助ける。表示/非表示を切り替え可能
+  for (let i = 0; i <= 55; i += 5) {
+    const ang = i*6*Math.PI/180;
+    const r = 104;
+    const x = 112 + r*Math.sin(ang), y = 112 - r*Math.cos(ang);
+    const mt = document.createElementNS(NS,'text');
+    mt.setAttribute('class','minute-guide');
+    mt.setAttribute('x',x); mt.setAttribute('y',y+3.6);
+    mt.setAttribute('text-anchor','middle');
+    mt.setAttribute('font-size','10.5');
+    mt.setAttribute('font-weight','bold');
+    mt.setAttribute('fill','#ff6b9d');
+    mt.style.display = showMinuteGuide ? '' : 'none';
+    mt.textContent = i;
+    svg.appendChild(mt);
+  }
+
+  // 針（もとのサイズのまま）
   const hourHand = document.createElementNS(NS,'line');
   hourHand.setAttribute('id','hand-hour');
   hourHand.setAttribute('class','hand');
-  hourHand.setAttribute('x1',100); hourHand.setAttribute('y1',100);
+  hourHand.setAttribute('x1',112); hourHand.setAttribute('y1',112);
   hourHand.setAttribute('stroke','#333'); hourHand.setAttribute('stroke-width','6'); hourHand.setAttribute('stroke-linecap','round');
   svg.appendChild(hourHand);
 
   const minHand = document.createElementNS(NS,'line');
   minHand.setAttribute('id','hand-min');
   minHand.setAttribute('class','hand');
-  minHand.setAttribute('x1',100); minHand.setAttribute('y1',100);
+  minHand.setAttribute('x1',112); minHand.setAttribute('y1',112);
   minHand.setAttribute('stroke','#ff6b9d'); minHand.setAttribute('stroke-width','4'); minHand.setAttribute('stroke-linecap','round');
   svg.appendChild(minHand);
 
@@ -291,12 +319,12 @@ function buildClockFace() {
   const minHit = document.createElementNS(NS,'line');
   minHit.setAttribute('id','hand-min-hit');
   minHit.setAttribute('class','hand');
-  minHit.setAttribute('x1',100); minHit.setAttribute('y1',100);
+  minHit.setAttribute('x1',112); minHit.setAttribute('y1',112);
   minHit.setAttribute('stroke','transparent'); minHit.setAttribute('stroke-width','26'); minHit.setAttribute('stroke-linecap','round');
   svg.appendChild(minHit);
 
   const center = document.createElementNS(NS,'circle');
-  center.setAttribute('cx',100); center.setAttribute('cy',100); center.setAttribute('r',5);
+  center.setAttribute('cx',112); center.setAttribute('cy',112); center.setAttribute('r',5);
   center.setAttribute('fill','#333');
   svg.appendChild(center);
 
@@ -312,8 +340,8 @@ function renderHands(totalMin) {
   const hh = document.getElementById('hand-hour');
   const mh = document.getElementById('hand-min');
   const mhHit = document.getElementById('hand-min-hit');
-  const hx = 100 + 45*Math.sin(hourAngle*Math.PI/180), hy = 100 - 45*Math.cos(hourAngle*Math.PI/180);
-  const mx = 100 + 72*Math.sin(minAngle*Math.PI/180), my = 100 - 72*Math.cos(minAngle*Math.PI/180);
+  const hx = 112 + 45*Math.sin(hourAngle*Math.PI/180), hy = 112 - 45*Math.cos(hourAngle*Math.PI/180);
+  const mx = 112 + 72*Math.sin(minAngle*Math.PI/180), my = 112 - 72*Math.cos(minAngle*Math.PI/180);
   hh.setAttribute('x2', hx); hh.setAttribute('y2', hy);
   mh.setAttribute('x2', mx); mh.setAttribute('y2', my);
   mhHit.setAttribute('x2', mx); mhHit.setAttribute('y2', my);
@@ -399,7 +427,7 @@ function animateElapse() {
     const angle2 = startMinAngle + dir * sweptMin * 6;
     const largeArc = Math.abs(angle2 - startMinAngle) > 180 ? 1 : 0;
     const sweepFlag = dir === 1 ? 1 : 0;
-    setArcPath(arcPathStr(100, 100, 80, startMinAngle, angle2, sweepFlag, largeArc), color);
+    setArcPath(arcPathStr(112, 112, 80, startMinAngle, angle2, sweepFlag, largeArc), color);
     if (p < 1) {
       requestAnimationFrame(frame);
     } else {
@@ -495,6 +523,16 @@ function setDifficulty(d) {
   document.getElementById('diff-normal').classList.toggle('sel', d==='normal');
   document.getElementById('diff-hard').classList.toggle('sel', d==='hard');
   nextProblem();
+}
+
+function toggleMinuteGuide() {
+  showMinuteGuide = !showMinuteGuide;
+  document.querySelectorAll('.minute-guide').forEach(el => {
+    el.style.display = showMinuteGuide ? '' : 'none';
+  });
+  const btn = document.getElementById('guide-toggle-btn');
+  btn.classList.toggle('on', showMinuteGuide);
+  btn.textContent = showMinuteGuide ? '🔢 ふんの すうじガイド：ひょうじ' : '🔢 ふんの すうじガイド：かくす';
 }
 
 function setResult(msg, cls) {
