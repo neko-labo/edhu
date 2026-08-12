@@ -8,11 +8,11 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --pink:#ff6b9d;--pink-l:#ffe0ee;
-  --blue:#5ba8ff;--blue-l:#deeeff;
-  --yellow:#ffce47;--green:#47cc8a;
-  --gray:#aaa;--text:#333;
-  --bg:#fffdf5;--card:#fff;
+  --pink:#db2777;--pink-l:#fce7f3;
+  --blue:#2563eb;--blue-l:#dbeafe;
+  --yellow:#fbbf24;--green:#16a34a;
+  --gray:#999;--text:#1a1a1a;
+  --bg:#ffffff;--card:#fff;
 }
 body{
   font-family:'Klee One','Hiragino Kaku Gothic ProN',sans-serif;
@@ -22,7 +22,7 @@ body{
 header{
   background:var(--pink);padding:6px 12px;
   display:flex;align-items:center;gap:8px;flex-shrink:0;
-  box-shadow:0 2px 6px rgba(255,107,157,.3);
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
 }
 header h1{color:#fff;font-size:1rem;flex:1}
 
@@ -79,7 +79,7 @@ header h1{color:#fff;font-size:1rem;flex:1}
   border:2px solid var(--pink-l);flex-shrink:0;
 }
 .mode-btn{
-  flex:1;padding:5px 6px;border:none;background:#fdf0f5;
+  flex:1;padding:5px 6px;border:none;background:#f5f5f5;
   font-family:inherit;font-size:0.72rem;font-weight:bold;
   cursor:pointer;color:var(--gray);transition:all .15s;
 }
@@ -89,7 +89,7 @@ header h1{color:#fff;font-size:1rem;flex:1}
 /* キャンバス共通 */
 .canvas-wrap{
   position:relative;border-radius:12px;overflow:hidden;flex-shrink:0;
-  border:3px solid var(--pink-l);background:#fffdf5;
+  border:3px solid var(--pink-l);background:#ffffff;
 }
 canvas{position:absolute;inset:0;width:100%;height:100%}
 #cv-guide{z-index:1}
@@ -113,7 +113,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 }
 .s-btn:active{transform:scale(.94)}
 .btn-pink{background:var(--pink);color:#fff}
-.btn-yellow{background:var(--yellow);color:#333}
+.btn-yellow{background:var(--yellow);color:#1a1a1a}
 .btn-green{background:var(--green);color:#fff}
 .btn-gray{background:#eee;color:#666}
 
@@ -143,7 +143,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   max-height:34px;
 }
 .row-btn:active,.row-btn.sel{background:var(--blue-l);border-color:var(--blue)}
-.row-btn.dk{border-color:#d4b8f0}
+.row-btn.dk{border-color:#999999}
 
 /* 五十音順ナビ */
 .seq-bar{
@@ -178,7 +178,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 .c-btn:active{transform:scale(.9);background:var(--pink-l);border-color:var(--pink)}
 .c-btn.sel{background:var(--pink-l);border-color:var(--pink);font-weight:bold}
 .c-btn.empty{border:none;background:transparent;cursor:default}
-.c-btn.dk{border-color:#d4b8f0}
+.c-btn.dk{border-color:#999999}
 
 /* 前後ナビ */
 .nav-row{display:flex;align-items:center;gap:4px;flex-shrink:0}
@@ -213,7 +213,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   background:#f5f5f5;font-family:inherit;font-size:0.68rem;
   cursor:pointer;color:var(--gray);transition:all .12s;
 }
-.spd-btn.sel{background:var(--yellow);border-color:#e6b800;color:#333;font-weight:bold;}
+.spd-btn.sel{background:var(--yellow);border-color:#f59e0b;color:#1a1a1a;font-weight:bold;}
 </style>
 </head>
 <body>
@@ -485,7 +485,7 @@ function buildRowGrid() {
     btn.className = 'row-btn' + (row.dk?' dk':'') + (row.seq?' ':'') + (selRow===row.key?' sel':'');
     btn.textContent = row.lbl;
     if(row.seq) {
-      btn.style.cssText = 'background:#d4f5e4;border-color:#47cc8a;grid-column:span 2;';
+      btn.style.cssText = 'background:#f0f0f0;border-color:#1a1a1a;grid-column:span 2;';
       btn.onclick = () => { selRow='seq'; buildRowGrid(); showSeqBar(); buildCharGrid([]); };
     } else {
       btn.onclick = () => {
@@ -653,6 +653,14 @@ function setMode(m, skipAutoplay) {
 // ============================================================
 // ガイドキャンバス（手本＋グリッド線）
 // ============================================================
+// 書き順を色でも区別できるようにする配色（暖色→寒色の順で、低学年にも見分けやすい配色）
+const STROKE_COLORS = ['#e74c3c','#e67e22','#f1c40f','#27ae60','#16a085','#2980b9','#8e44ad','#c0392b','#2c3e50','#d35400'];
+function strokeColor(i) { return STROKE_COLORS[i % STROKE_COLORS.length]; }
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+
 function redrawGuide(highlightIdx) {
   const cv = document.getElementById('cv-guide');
   const ctx = cv.getContext('2d');
@@ -660,11 +668,11 @@ function redrawGuide(highlightIdx) {
   ctx.clearRect(0,0,sz,sz);
 
   // 背景
-  ctx.fillStyle = '#fffdf5';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0,0,sz,sz);
 
   // 升目
-  ctx.strokeStyle = '#ffd0e8';
+  ctx.strokeStyle = '#dddddd';
   ctx.lineWidth = 1;
   ctx.setLineDash([4,4]);
   ctx.beginPath();
@@ -682,24 +690,25 @@ function redrawGuide(highlightIdx) {
   strokes.forEach((grp, i) => {
     if(!grp.median) return;
     const pts = grp.median.map(p=>({x:p[0]*sc, y:p[1]*sc}));
+    const sColor = strokeColor(i);
 
     if(!hasHighlight) {
-      // 通常表示（アニメモード用）：全画を均等な薄さで
-      drawSmoothLine(ctx, pts, 'rgba(180,210,255,0.45)', sz*0.05, false);
-      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, 'rgba(91,168,255,0.85)');
+      // 通常表示：画ごとに色を変えて、順番が一目でわかるように
+      drawSmoothLine(ctx, pts, hexToRgba(sColor, 0.75), sz*0.058, false);
+      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, sColor);
       return;
     }
 
-    // なぞりモード：現在の画だけ目立たせ、それ以外は薄く
+    // なぞりモード：現在の画は濃い色、書き終えた画はその画自身の色を薄く残す
     const isCur = i === highlightIdx;
     const isDone = i < highlightIdx;
-    const color = isCur ? 'rgba(80,150,255,0.9)' : (isDone ? 'rgba(160,160,160,0.22)' : 'rgba(210,210,210,0.18)');
-    const width = isCur ? sz*0.062 : sz*0.045;
+    const color = isCur ? hexToRgba(sColor, 0.95) : (isDone ? hexToRgba(sColor, 0.4) : 'rgba(210,210,210,0.18)');
+    const width = isCur ? sz*0.07 : sz*0.05;
     drawSmoothLine(ctx, pts, color, width, isCur);
 
     if(isCur) {
-      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, 'rgba(80,150,255,0.95)');
-      drawArrowHead(ctx, pts, sz, 'rgba(80,150,255,0.9)');
+      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, sColor);
+      drawArrowHead(ctx, pts, sz, hexToRgba(sColor, 0.9));
     }
   });
 }
@@ -765,7 +774,66 @@ function groupStrokes(data) {
   // 判定基準：3点以下の短い画 かつ 文字全体の右上エリア（x>500, y<500）にある画
   shrinkDakuten(groups);
 
+  // 書き出しの「入り」の巻き込み（逆方向へのフック）を検出して取り除く
+  // → 素直な書き出しにしてから丸め処理をかける
+  groups.forEach(g => { if(g.median) g.median = trimEntryHook(g.median); });
+
+  // お手本の「クセ」（はねの鋭さ・角の尖り）を和らげ、低学年でも真似しやすい
+  // 丸みのある線にする（書き順・始点終点は変えない）
+  groups.forEach(g => { if(g.median) g.median = softenMedian(g.median); });
+
   return groups;
+}
+
+// 書き出し部分の「フック」「短い入りの一筆」を検出して除去する。
+// 例1：「と」の2画目のように、最初の点が逆方向へ戻ってから進み始める場合
+// 例2：「あ」の3画目のように、短い入りの一筆の直後に大きく方向転換する場合
+//      （丸め処理をかけると、この短い入りが小さなループのように見えてしまう）
+// どちらも書き出し点を切り落として、素直な始点に補正する。
+function trimEntryHook(pts) {
+  if(!pts || pts.length < 4) return pts;
+  // 全体の長さ（フックが全体に対して十分小さい時だけ切り落とす）
+  let totalLen = 0;
+  for(let i=0;i<pts.length-1;i++){
+    totalLen += Math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]);
+  }
+  let out = pts.slice();
+  for(let pass = 0; pass < 2 && out.length >= 4; pass++) {
+    const p0 = out[0], p1 = out[1], p2 = out[2];
+    const v1x = p1[0]-p0[0], v1y = p1[1]-p0[1];
+    const v2x = p2[0]-p1[0], v2y = p2[1]-p1[1];
+    const len1 = Math.hypot(v1x,v1y), len2 = Math.hypot(v2x,v2y);
+    if(len1 < 1 || len2 < 1) break;
+    const dot = (v1x*v2x + v1y*v2y) / (len1*len2);
+    // dotが小さい（向きが大きく変わる）＝入りの一筆・巻き込み。
+    // かつ、その入り区間が短く（次の区間より明らかに短い、かつ画全体からみても短い）
+    // 場合のみ、書き出し点として除去する。
+    const isSharpTurn = dot < 0.34;          // 約70°以上の方向転換
+    const isShortLeadIn = len1 < len2 * 0.6 && len1 < totalLen * 0.22;
+    if(isSharpTurn && isShortLeadIn) {
+      out = out.slice(1);
+    } else break;
+  }
+  return out;
+}
+
+// 折れ角を丸める（Chaikinのコーナーカット）。始点・終点は保持し、
+// とめ・はねの鋭い折れ線をなだらかにして、Klee One的な優しい字形に近づける。
+function softenMedian(pts, iterations) {
+  if(!pts || pts.length < 3) return pts;
+  iterations = iterations || 3;
+  let cur = pts;
+  for(let iter = 0; iter < iterations; iter++) {
+    const next = [cur[0]];
+    for(let i = 0; i < cur.length - 1; i++) {
+      const p0 = cur[i], p1 = cur[i+1];
+      next.push([p0[0] + (p1[0]-p0[0])*0.25, p0[1] + (p1[1]-p0[1])*0.25]);
+      next.push([p0[0] + (p1[0]-p0[0])*0.75, p0[1] + (p1[1]-p0[1])*0.75]);
+    }
+    next.push(cur[cur.length-1]);
+    cur = next;
+  }
+  return cur;
 }
 
 // 濁点（゛）・半濁点（゜）の画を検出し、中心基準で縮小する
@@ -854,19 +922,21 @@ function startAnim() {
   const cv = document.getElementById('cv-anim');
   const ctx = cv.getContext('2d');
   const sc = cvSize / VBOX;
-  const lw = cvSize * 0.055;
+  const lw = cvSize * 0.062;
   const info = document.getElementById('stroke-label');
 
-  // 完了済み画のスケール済み座標リスト
+  // 完了済み画のスケール済み座標リスト（画ごとの色を保持）
   const doneStrokes = [];
 
   // 現在の状態
-  let sIdx = 0;       // 現在の画インデックス
-  let segIdx = 0;     // median内のセグメントインデックス（ptIdx → ptIdx+1）
-  let t = 0;          // セグメント内の進行 0.0 〜 1.0
+  let sIdx = 0;         // 現在の画インデックス
+  let traveled = 0;     // 現在の画で進んだ弧長（累積距離）
 
-  // 画ごとの全点列（スケール済み）
+  // 画ごとの全点列（スケール済み）と累積距離
   let curPts = null;
+  let curCum = null;
+  let curTotalLen = 0;
+  let perFrameDist = 0;
 
   function loadStroke(i) {
     const grp = strokes[i];
@@ -874,28 +944,48 @@ function startAnim() {
     return grp.median.map(p => ({x: p[0]*sc, y: p[1]*sc}));
   }
 
-  function drawDone() {
-    doneStrokes.forEach(pts => drawSmoothLine(ctx, pts, '#b03060', lw, false));
-  }
-
-  // 1フレームあたりの進行量
-  // medianの点間距離の合計でスピードを調整し、全画で一定の速さに
-  function calcSpeed(pts) {
-    let totalDist = 0;
+  // 点列から累積距離（弧長）配列を作る
+  function buildCum(pts) {
+    const cum = [0];
     for(let i=0;i<pts.length-1;i++){
       const dx=pts[i+1].x-pts[i].x, dy=pts[i+1].y-pts[i].y;
-      totalDist += Math.sqrt(dx*dx+dy*dy);
+      cum.push(cum[i] + Math.sqrt(dx*dx+dy*dy));
     }
-    // 目標：1画 約20フレーム（60fps想定で約0.33秒）をベースに、speedMultiplierで調整
-    const targetFrames = Math.max(8, (totalDist / (cvSize * 0.07)) / speedMultiplier);
-    return 1.0 / targetFrames;
+    return cum;
   }
 
-  let speed = 0.05;
+  // 弧長distの位置までの点列を返す（点数に依存しない、なめらかな進行のため）
+  function sliceByLength(pts, cum, dist) {
+    const total = cum[cum.length-1];
+    if(dist <= 0) return [pts[0]];
+    if(dist >= total) return pts;
+    let k = 0;
+    while(k < cum.length-2 && cum[k+1] < dist) k++;
+    const segLen = (cum[k+1] - cum[k]) || 1;
+    const frac = (dist - cum[k]) / segLen;
+    const p0 = pts[k], p1 = pts[k+1];
+    const result = pts.slice(0, k+1);
+    result.push({x: p0.x + (p1.x-p0.x)*frac, y: p0.y + (p1.y-p0.y)*frac});
+    return result;
+  }
 
-  // 最初の画を準備
-  curPts = loadStroke(0);
-  if(curPts) speed = calcSpeed(curPts);
+  function drawDone() {
+    doneStrokes.forEach(d => drawSmoothLine(ctx, d.pts, hexToRgba(d.color, 0.85), lw, false));
+  }
+
+  // 1画ぶんの所要フレーム数（点の数に左右されず、実際の線の長さだけで決まる）
+  function setupStroke(i) {
+    curPts = loadStroke(i);
+    if(!curPts) return;
+    curCum = buildCum(curPts);
+    curTotalLen = curCum[curCum.length-1];
+    // 目標：1画 約20フレーム（60fps想定で約0.33秒）をベースに、speedMultiplierで調整
+    const targetFrames = Math.max(8, (curTotalLen / (cvSize * 0.07)) / speedMultiplier);
+    perFrameDist = curTotalLen / targetFrames;
+    traveled = 0;
+  }
+
+  setupStroke(0);
   info.textContent = `1 / ${total} かく`;
 
   // 画と画の間の一時停止（フレーム数）
@@ -922,59 +1012,41 @@ function startAnim() {
 
     if(!curPts) {
       // この画にmedianなし → スキップ
-      doneStrokes.push([]);
-      sIdx++; segIdx=0; t=0;
-      curPts = loadStroke(sIdx);
-      if(curPts) speed = calcSpeed(curPts);
+      doneStrokes.push({pts:[], color: strokeColor(sIdx)});
+      sIdx++;
+      setupStroke(sIdx);
       animRaf = requestAnimationFrame(tick);
       return;
     }
 
-    // ---- 現在の画を描画 ----
-    // t は segIdx → segIdx+1 の間の進行度
-
-    // 書き終わった部分（0 〜 segIdx+1 まで）
-    const drawnPts = curPts.slice(0, segIdx + 1);
-
-    // 現在補間中の点
-    const from = curPts[segIdx];
-    const to   = curPts[Math.min(segIdx+1, curPts.length-1)];
-    const ex = from.x + (to.x - from.x) * Math.min(t, 1);
-    const ey = from.y + (to.y - from.y) * Math.min(t, 1);
-    const animPts = [...drawnPts, {x:ex, y:ey}];
-
-    drawSmoothLine(ctx, animPts, '#ff6b9d', lw, true);
+    // ---- 現在の画を描画（弧長ベースで点数に依存しない進行）----
+    const animPts = sliceByLength(curPts, curCum, traveled);
+    drawSmoothLine(ctx, animPts, hexToRgba(strokeColor(sIdx), 0.95), lw, true);
 
     // 画番号を右上
     ctx.save();
     ctx.font = `bold ${cvSize*0.09}px sans-serif`;
-    ctx.fillStyle = 'rgba(255,107,157,0.75)';
+    ctx.fillStyle = 'rgba(26,26,26,0.75)';
     ctx.textAlign = 'right';
     ctx.fillText(String(sIdx+1), cvSize-4, cvSize*0.11);
     ctx.restore();
 
     // 進行
-    t += speed;
-    if(t >= 1.0) {
-      t = 0;
-      segIdx++;
-      if(segIdx >= curPts.length - 1) {
-        // この画完了 → doneに移してポーズ
-        doneStrokes.push(curPts);
-        sIdx++;
-        segIdx = 0;
-        if(sIdx >= total) {
-          // 全完了：最終描画
-          ctx.clearRect(0, 0, cvSize, cvSize);
-          drawDone();
-          info.textContent = `ぜんぶで ${total} かく`;
-          return;
-        }
-        curPts = loadStroke(sIdx);
-        if(curPts) speed = calcSpeed(curPts);
-        info.textContent = `${sIdx+1} / ${total} かく`;
-        pauseFrames = Math.max(2, Math.round(10 / speedMultiplier));  // 次の画の前の一呼吸
+    traveled += perFrameDist;
+    if(traveled >= curTotalLen) {
+      // この画完了 → doneに移してポーズ
+      doneStrokes.push({pts: curPts, color: strokeColor(sIdx)});
+      sIdx++;
+      if(sIdx >= total) {
+        // 全完了：最終描画
+        ctx.clearRect(0, 0, cvSize, cvSize);
+        drawDone();
+        info.textContent = `ぜんぶで ${total} かく`;
+        return;
       }
+      setupStroke(sIdx);
+      info.textContent = `${sIdx+1} / ${total} かく`;
+      pauseFrames = Math.max(2, Math.round(10 / speedMultiplier));  // 次の画の前の一呼吸
     }
 
     animRaf = requestAnimationFrame(tick);
@@ -1046,7 +1118,7 @@ function setupTrace() {
   const cv = document.getElementById('cv-trace');
   const ctx = cv.getContext('2d');
   ctx.clearRect(0,0,cvSize,cvSize);
-  ctx.strokeStyle = '#ff6b9d';
+  ctx.strokeStyle = '#1a1a1a';
   ctx.lineWidth = Math.max(8, cvSize*0.035);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
