@@ -371,38 +371,86 @@ function drawRefShape() {
 
 // 各画の始点に番号バッジだけを静止表示（アニメーションなし）
 // medians の id は "1a"/"1b" のように、1つの画を描画用に複数パスへ
-// 分割している場合がある（例:「み」の1画目はループ部分で1a/1bに分割）。
-// 末尾のアルファベットを除いた番号でグループ化し、実際の画数・始点で番号を振る。
+// 分割している場合がある。番号バッジ・矢印の起点となる「筆の入り」は
+// 常に先頭サブパスの始点であり、直後の動きの向きもそのサブパス自身の
+// 点列から求まるため、先頭サブパスだけを使えばよい。
 function strokeGroups() {
   if (!curData || !curData.medians) return [];
-  const groups = [];
+  const scale = cvSize / VBOX;
+  const order = [];
   const seen = new Set();
   curData.medians.forEach(m => {
+    if (!m.value || !m.value.length) return;
     const key = String(m.id).replace(/[a-z]+$/i, '');
-    if (!seen.has(key) && m.value && m.value.length) {
+    if (!seen.has(key)) {
       seen.add(key);
-      groups.push(m.value[0]);
+      order.push(m.value.map(([x, y]) => [x * scale, y * scale]));
     }
   });
-  return groups;
+  return order;
+}
+
+// 点列に沿って、始点から指定ピクセル分だけ進んだ位置の座標を求める
+function pointAlongPath(pts, dist) {
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const segLen = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+    if (acc + segLen >= dist) {
+      const r = segLen ? (dist - acc) / segLen : 0;
+      return [pts[i-1][0] + (pts[i][0]-pts[i-1][0]) * r, pts[i-1][1] + (pts[i][1]-pts[i-1][1]) * r];
+    }
+    acc += segLen;
+  }
+  return pts[pts.length - 1];
+}
+
+// 筆の入り（画の始点）から、なぞり始める方向を示す矢印を描く
+function drawDirectionArrow(ctx, pts) {
+  if (pts.length < 2) return;
+  const nearR = cvSize * 0.075; // 番号バッジと重ならないよう少し離す
+  const farR = cvSize * 0.22;
+  const p1 = pointAlongPath(pts, nearR);
+  const p2 = pointAlongPath(pts, farR);
+  const dx = p2[0]-p1[0], dy = p2[1]-p1[1];
+  const dist = Math.hypot(dx, dy) || 1;
+  const angle = Math.atan2(dy/dist, dx/dist);
+  const headLen = cvSize * 0.05;
+  const spread = Math.PI / 6.5;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(155,107,255,0.9)';
+  ctx.fillStyle = 'rgba(155,107,255,0.9)';
+  ctx.lineWidth = Math.max(3, cvSize * 0.018);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(p1[0], p1[1]);
+  ctx.lineTo(p2[0], p2[1]);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(p2[0], p2[1]);
+  ctx.lineTo(p2[0] - headLen*Math.cos(angle-spread), p2[1] - headLen*Math.sin(angle-spread));
+  ctx.lineTo(p2[0] - headLen*Math.cos(angle+spread), p2[1] - headLen*Math.sin(angle+spread));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawStrokeNumbersStatic() {
-  const starts = strokeGroups();
-  if (!starts.length) return;
+  const groups = strokeGroups();
+  if (!groups.length) return;
   const ctx = cvRef.getContext('2d');
-  const scale = cvSize / VBOX;
-  starts.forEach(([x, y], i) => {
-    const px = x * scale, py = y * scale;
+  groups.forEach((pts, i) => {
+    drawDirectionArrow(ctx, pts);
+    const [x, y] = pts[0];
     ctx.beginPath();
-    ctx.arc(px, py, cvSize * 0.045, 0, Math.PI * 2);
+    ctx.arc(x, y, cvSize * 0.045, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,206,71,0.95)';
     ctx.fill();
     ctx.fillStyle = '#7a5b00';
     ctx.font = 'bold ' + Math.round(cvSize * 0.08) + 'px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), px, py);
+    ctx.fillText(String(i + 1), x, y);
   });
 }
 
