@@ -8,11 +8,11 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --pink:#db2777;--pink-l:#fce7f3;
-  --blue:#2563eb;--blue-l:#dbeafe;
-  --yellow:#fbbf24;--green:#16a34a;
+  --pink:#ffb3c6;--pink-l:#ffe4ec;--pink-d:#d1477a;
+  --blue:#a8d8f0;--blue-l:#e5f4fb;--blue-d:#2f7fad;
+  --yellow:#ffe29a;--green:#b5e8bd;--green-d:#3f9a55;
   --gray:#999;--text:#1a1a1a;
-  --bg:#ffffff;--card:#fff;
+  --bg:#fffaf7;--card:#fff;
 }
 body{
   font-family:'Klee One','Hiragino Kaku Gothic ProN',sans-serif;
@@ -24,7 +24,7 @@ header{
   display:flex;align-items:center;gap:8px;flex-shrink:0;
   box-shadow:0 2px 6px rgba(0,0,0,.25);
 }
-header h1{color:#fff;font-size:1rem;flex:1}
+header h1{color:var(--text);font-size:1rem;flex:1}
 
 /* ===== レイアウト ===== */
 .layout{
@@ -83,8 +83,8 @@ header h1{color:#fff;font-size:1rem;flex:1}
   font-family:inherit;font-size:0.72rem;font-weight:bold;
   cursor:pointer;color:var(--gray);transition:all .15s;
 }
-.mode-btn.active-anim{background:var(--pink);color:#fff}
-.mode-btn.active-trace{background:var(--blue);color:#fff}
+.mode-btn.active-anim{background:var(--pink);color:var(--text)}
+.mode-btn.active-trace{background:var(--blue);color:var(--text)}
 
 /* キャンバス共通 */
 .canvas-wrap{
@@ -102,7 +102,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   flex-shrink:0;
 }
 .stroke-label{font-size:0.7rem;color:var(--gray)}
-.score-msg{font-size:0.72rem;color:var(--green);font-weight:bold;flex:1;text-align:center}
+.score-msg{font-size:0.72rem;color:var(--green-d);font-weight:bold;flex:1;text-align:center}
 
 /* ボタン行 */
 .btn-row{display:flex;gap:5px;flex-shrink:0}
@@ -112,9 +112,9 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   cursor:pointer;transition:all .12s;
 }
 .s-btn:active{transform:scale(.94)}
-.btn-pink{background:var(--pink);color:#fff}
-.btn-yellow{background:var(--yellow);color:#1a1a1a}
-.btn-green{background:var(--green);color:#fff}
+.btn-pink{background:var(--pink);color:var(--text)}
+.btn-yellow{background:var(--yellow);color:var(--text)}
+.btn-green{background:var(--green);color:var(--text)}
 .btn-gray{background:#eee;color:#666}
 
 /* ===== 右：文字選択 ===== */
@@ -129,7 +129,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   background:#f5f5f5;font-family:inherit;font-size:0.75rem;
   cursor:pointer;color:var(--gray);transition:all .15s;
 }
-.kana-tab.active{background:var(--pink);border-color:var(--pink);color:#fff;font-weight:bold}
+.kana-tab.active{background:var(--pink);border-color:var(--pink);color:var(--text);font-weight:bold}
 
 /* 行グリッド */
 .row-grid{
@@ -151,15 +151,15 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   background:var(--blue-l);border-radius:9px;padding:4px 6px;flex-shrink:0;
 }
 .seq-bar.show{display:flex}
-.seq-big{font-size:1.6rem;flex:1;text-align:center;color:var(--pink);font-weight:bold}
+.seq-big{font-size:1.6rem;flex:1;text-align:center;color:var(--pink-d);font-weight:bold}
 .seq-btn{
   width:30px;height:30px;border:none;border-radius:7px;
-  background:var(--blue);color:#fff;font-size:0.9rem;
+  background:var(--blue);color:var(--text);font-size:0.9rem;
   cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
 .seq-btn:disabled{background:#ccc}
 .seq-go{
-  padding:0 8px;background:var(--pink);color:#fff;
+  padding:0 8px;background:var(--pink);color:var(--text);
   font-family:inherit;font-size:0.7rem;font-weight:bold;
   border:none;border-radius:7px;height:30px;cursor:pointer;flex-shrink:0;
 }
@@ -182,7 +182,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 
 /* 前後ナビ */
 .nav-row{display:flex;align-items:center;gap:4px;flex-shrink:0}
-.nav-ch{font-size:0.85rem;color:var(--pink);font-weight:bold;flex:1;text-align:center}
+.nav-ch{font-size:0.85rem;color:var(--pink-d);font-weight:bold;flex:1;text-align:center}
 .n-btn{
   padding:4px 8px;border:1px solid #ddd;border-radius:7px;
   background:#f5f5f5;font-size:0.7rem;cursor:pointer;color:#666;
@@ -213,13 +213,13 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   background:#f5f5f5;font-family:inherit;font-size:0.68rem;
   cursor:pointer;color:var(--gray);transition:all .12s;
 }
-.spd-btn.sel{background:var(--yellow);border-color:#f59e0b;color:#1a1a1a;font-weight:bold;}
+.spd-btn.sel{background:var(--yellow);border-color:#e8b654;color:var(--text);font-weight:bold;}
 </style>
 </head>
 <body>
 <header>
   <h1>✏️ かなかき練習</h1>
-  <div id="hdr-char" style="color:#fff;font-size:1.4rem;font-weight:bold;display:none"></div>
+  <div id="hdr-char" style="color:var(--text);font-size:1.4rem;font-weight:bold;display:none"></div>
 </header>
 
 <div class="layout">
@@ -377,6 +377,54 @@ function applyStrokeOrderOverride(ch, data) {
   };
   data.strokes = reorder(data.strokes);
   data.medians = reorder(data.medians);
+  return data;
+}
+
+// データ元(kana-svg-data)の画の長さ（特にはらい・払いの先端）が
+// 教育現場の標準的なお手本より短く、実際の書き方と印象が違う文字を補正する。
+// 値の指定方法は3種類：
+//   数値（例 1.15）         → その画の「最後の区間」だけを末尾方向へ伸ばす倍率
+//   {scale: 数値}            → その画全体を「始点」を基準に一律拡大する倍率
+//   {replace: [[x,y],...]}   → 座標そのものを直接置き換える（元データの折れ方自体が
+//                              不自然で、伸縮では直しきれない場合に使う）
+// 例：「ホ/ボ/ポ」の4画目（右はらい）、「ム」の1・2画目
+const STROKE_LENGTH_OVERRIDES = {
+  'ホ': { '4': 1.15 },
+  'ボ': { '4': 1.15 },
+  'ポ': { '4': 1.15 },
+  // ムの2画目：元データは(692,558)→(834,726)→(847,793)で終端付近が急に折れ曲がっており、
+  // 単純拡大するとその折れが誇張されてくねった線になってしまうため、
+  // まっすぐな2点の線に置き換えて素直な払いにする
+  // ※ 1画目は延長すると2画目の線と交差してしまう（実際に計算して確認済み）ため、
+  //   延長せず元の長さのままにしている
+  'ム': { '2': { replace: [[692, 558], [900, 850]] } },
+};
+
+function applyStrokeLengthOverride(ch, data) {
+  const overrides = STROKE_LENGTH_OVERRIDES[ch];
+  if(!overrides || !data || !data.medians) return data;
+  // このIDは手動で長さを調整した「本体の画」であることを示す印。
+  // shrinkDakuten の誤検出（画数の少ない文字だと、伸ばした画が
+  // 「最後の2画」に入り込み、濁点と誤認識されてしまう）を防ぐために使う。
+  data._lengthOverrideIds = Object.keys(overrides);
+  data.medians.forEach(m => {
+    const rule = overrides[m.id];
+    if(!rule || !m.value || m.value.length < 2) return;
+    if(typeof rule === 'number') {
+      // 最後の区間だけ、その方向のまま伸ばす
+      const n = m.value.length;
+      const p0 = m.value[n-2], p1 = m.value[n-1];
+      const dx = p1[0]-p0[0], dy = p1[1]-p0[1];
+      m.value[n-1] = [p0[0] + dx*rule, p0[1] + dy*rule];
+    } else if(rule.scale) {
+      // 始点を基準に画全体を一律拡大
+      const [sx, sy] = m.value[0];
+      m.value = m.value.map(([x,y]) => [sx + (x-sx)*rule.scale, sy + (y-sy)*rule.scale]);
+    } else if(rule.replace) {
+      // 座標を直接置き換え
+      m.value = rule.replace.map(p => [...p]);
+    }
+  });
   return data;
 }
 
@@ -586,6 +634,7 @@ async function loadChar(ch, seqI, opts) {
     if(!res.ok) throw new Error('HTTP '+res.status);
     charData = await res.json();
     charData = applyStrokeOrderOverride(ch, charData);
+    charData = applyStrokeLengthOverride(ch, charData);
     showLoading(false);
     setMode(mode, skipAutoplay);
   } catch(e) {
@@ -654,7 +703,7 @@ function setMode(m, skipAutoplay) {
 // ガイドキャンバス（手本＋グリッド線）
 // ============================================================
 // 書き順を色でも区別できるようにする配色（暖色→寒色の順で、低学年にも見分けやすい配色）
-const STROKE_COLORS = ['#e74c3c','#e67e22','#f1c40f','#27ae60','#16a085','#2980b9','#8e44ad','#c0392b','#2c3e50','#d35400'];
+const STROKE_COLORS = ['#ff9aa2','#ffb480','#ffd97a','#a8d8a0','#8fd4c9','#9ac6ef','#b6a8e0','#f2a6c9','#c9b29b','#8fc9dd'];
 function strokeColor(i) { return STROKE_COLORS[i % STROKE_COLORS.length]; }
 function hexToRgba(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -694,8 +743,11 @@ function redrawGuide(highlightIdx) {
 
     if(!hasHighlight) {
       // 通常表示：画ごとに色を変えて、順番が一目でわかるように
-      drawSmoothLine(ctx, pts, hexToRgba(sColor, 0.75), sz*0.058, false);
-      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, sColor);
+      // 濁点・半濁点マークは画そのものが小さいので、通常画と同じ太さで描くと
+      // 隣り合う2画（゛）がふくらんで団子状に重なって見えてしまう→細めに描く
+      const w = grp.isDakuten ? sz*0.03 : sz*0.058;
+      drawSmoothLine(ctx, pts, hexToRgba(sColor, 0.75), w, false);
+      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, sColor, grp.isDakuten ? 0.65 : 1);
       return;
     }
 
@@ -703,25 +755,35 @@ function redrawGuide(highlightIdx) {
     const isCur = i === highlightIdx;
     const isDone = i < highlightIdx;
     const color = isCur ? hexToRgba(sColor, 0.95) : (isDone ? hexToRgba(sColor, 0.4) : 'rgba(210,210,210,0.18)');
-    const width = isCur ? sz*0.07 : sz*0.05;
+    const width = grp.isDakuten ? (isCur ? sz*0.04 : sz*0.028) : (isCur ? sz*0.07 : sz*0.05);
     drawSmoothLine(ctx, pts, color, width, isCur);
 
     if(isCur) {
-      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, sColor);
+      if(showStrokeNum) drawStrokeBadge(ctx, pts[0], i+1, sz, sColor, grp.isDakuten ? 0.65 : 1);
       drawArrowHead(ctx, pts, sz, hexToRgba(sColor, 0.9));
     }
   });
 }
 
 // 書き始め位置に番号バッジを描画
-function drawStrokeBadge(ctx, pos, num, sz, color) {
+// 背景色の明るさから、白文字/黒文字どちらが読みやすいかを判定
+// （パステルカラーは明るいので、白文字だと数字が読めなくなるため）
+function readableTextColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+  const luminance = (0.299*r + 0.587*g + 0.114*b) / 255;
+  return luminance > 0.6 ? '#1a1a1a' : '#fff';
+}
+
+function drawStrokeBadge(ctx, pos, num, sz, color, scale) {
+  scale = scale || 1;
   ctx.save();
   ctx.beginPath();
-  ctx.arc(pos.x, pos.y, sz*0.045, 0, Math.PI*2);
+  ctx.arc(pos.x, pos.y, sz*0.045*scale, 0, Math.PI*2);
   ctx.fillStyle = color;
   ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = `bold ${sz*0.055}px sans-serif`;
+  ctx.fillStyle = readableTextColor(color);
+  ctx.font = `bold ${sz*0.055*scale}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(num), pos.x, pos.y + sz*0.002);
@@ -770,17 +832,26 @@ function groupStrokes(data) {
 
   const groups = order.map(k => map.get(k));
 
+  // 手動で長さを補正した画（STROKE_LENGTH_OVERRIDES対象）には印を付けておく。
+  // 画数の少ない文字だと、伸ばした画が「最後の2画」の範囲に入り込み、
+  // 濁点・半濁点と誤認識されてしまうことがあるため、その除外に使う。
+  const overrideIds = data._lengthOverrideIds || [];
+  order.forEach(k => { if(overrideIds.includes(k)) map.get(k).isManualStroke = true; });
+
   // 濁点・半濁点ストロークを検出して縮小する
   // 判定基準：3点以下の短い画 かつ 文字全体の右上エリア（x>500, y<500）にある画
   shrinkDakuten(groups);
 
   // 書き出しの「入り」の巻き込み（逆方向へのフック）を検出して取り除く
   // → 素直な書き出しにしてから丸め処理をかける
-  groups.forEach(g => { if(g.median) g.median = trimEntryHook(g.median); });
+  // ※ 濁点・半濁点マーク（小さな丸）は対象外。小さい円弧にこの処理をかけると
+  //   点が偏って歪んだ形（コンマ状など）になってしまうため。
+  groups.forEach(g => { if(g.median && !g.isDakuten) g.median = trimEntryHook(g.median); });
 
   // お手本の「クセ」（はねの鋭さ・角の尖り）を和らげ、低学年でも真似しやすい
   // 丸みのある線にする（書き順・始点終点は変えない）
-  groups.forEach(g => { if(g.median) g.median = softenMedian(g.median); });
+  // ※ 濁点・半濁点マークは対象外（理由は上記と同じ）
+  groups.forEach(g => { if(g.median && !g.isDakuten) g.median = softenMedian(g.median); });
 
   return groups;
 }
@@ -842,6 +913,7 @@ function shrinkDakuten(groups) {
   const n = groups.length;
 
   groups.forEach((g, i) => {
+    if(g.isManualStroke) return; // 手動補正済みの画は濁点判定の対象外
     const pts = g.median;
     if(!pts || pts.length < 2) return;
 
@@ -856,6 +928,7 @@ function shrinkDakuten(groups) {
     const isDakuten = isLastTwo && avgX > 600 && size < 260;
 
     if(isDakuten) {
+      g.isDakuten = true; // 後段の「クセ取り」処理から除外するための印
       const cx = pts[0][0], cy = pts[0][1]; // 書き始め点を基準に縮小
       g.median = pts.map(p => [
         cx + (p[0]-cx) * SHRINK,
@@ -969,8 +1042,13 @@ function startAnim() {
     return result;
   }
 
+  function strokeWidth(i) {
+    const grp = strokes[i];
+    return (grp && grp.isDakuten) ? cvSize * 0.032 : lw;
+  }
+
   function drawDone() {
-    doneStrokes.forEach(d => drawSmoothLine(ctx, d.pts, hexToRgba(d.color, 0.85), lw, false));
+    doneStrokes.forEach(d => drawSmoothLine(ctx, d.pts, hexToRgba(d.color, 0.85), d.width, false));
   }
 
   // 1画ぶんの所要フレーム数（点の数に左右されず、実際の線の長さだけで決まる）
@@ -1012,7 +1090,7 @@ function startAnim() {
 
     if(!curPts) {
       // この画にmedianなし → スキップ
-      doneStrokes.push({pts:[], color: strokeColor(sIdx)});
+      doneStrokes.push({pts:[], color: strokeColor(sIdx), width: strokeWidth(sIdx)});
       sIdx++;
       setupStroke(sIdx);
       animRaf = requestAnimationFrame(tick);
@@ -1021,7 +1099,7 @@ function startAnim() {
 
     // ---- 現在の画を描画（弧長ベースで点数に依存しない進行）----
     const animPts = sliceByLength(curPts, curCum, traveled);
-    drawSmoothLine(ctx, animPts, hexToRgba(strokeColor(sIdx), 0.95), lw, true);
+    drawSmoothLine(ctx, animPts, hexToRgba(strokeColor(sIdx), 0.95), strokeWidth(sIdx), true);
 
     // 画番号を右上
     ctx.save();
@@ -1035,7 +1113,7 @@ function startAnim() {
     traveled += perFrameDist;
     if(traveled >= curTotalLen) {
       // この画完了 → doneに移してポーズ
-      doneStrokes.push({pts: curPts, color: strokeColor(sIdx)});
+      doneStrokes.push({pts: curPts, color: strokeColor(sIdx), width: strokeWidth(sIdx)});
       sIdx++;
       if(sIdx >= total) {
         // 全完了：最終描画
