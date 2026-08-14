@@ -381,7 +381,7 @@ function groupStrokes(data, ch) {
 
   shrinkDakuten(groups, ch);
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = trimEntryHook(g.median); });
-  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 35); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 8); });
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = softenMedian(g.median); });
 
   return groups;
@@ -642,7 +642,7 @@ function playAnim() {
     curPts = loadStroke(i);
     curCum = buildCum(curPts);
     curTotalLen = curCum[curCum.length-1];
-    const targetFrames = Math.max(8, curTotalLen / (cvSize * 0.07));
+    const targetFrames = Math.max(18, curTotalLen / (cvSize * 0.03));
     perFrameDist = curTotalLen / targetFrames;
     traveled = 0;
   }
@@ -669,7 +669,7 @@ function playAnim() {
         return;
       }
       setupStroke(sIdx);
-      pauseFrames = 8;
+      pauseFrames = 18;
     }
     animRaf = requestAnimationFrame(tick);
   }
