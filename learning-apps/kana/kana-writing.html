@@ -908,24 +908,34 @@ function softenMedian(pts, iterations) {
 }
 
 // 濁点（゛）・半濁点（゜）の画を検出し、中心基準で縮小する
+//
+// 【重要】以前は「最後の2画以内・右側・サイズが小さい」という座標だけの推測で
+// 判定していたが、これは「よ」「む」「ふ」「な」「お」「ネ」など、
+// 濁点を持たない文字の最後の画（本物の一画）を誤って濁点と誤認識し、
+// 縮小・細線化してしまう不具合があった（実際の座標を比較すると、本物の濁点と
+// 誤検出された通常画のサイズ・位置が重なっており、座標だけでは区別できないため）。
+//
+// そのため、判定を「その文字が濁点・半濁点を持つ文字かどうか」という
+// 確実な文字一覧ベースに変更した。座標による推測は行わない。
+const DAKUTEN_CHARS = new Set('がぎぐげござじずぜぞだぢづでどばびぶべぼガギグゲゴザジズゼゾダヂヅデドバビブベボ');
+const HANDAKUTEN_CHARS = new Set('ぱぴぷぺぽパピプペポ');
+
 function shrinkDakuten(groups) {
-  const SHRINK = 0.6; // 濁点の長さを60%に縮小（誤検出時の影響を抑えるため控えめに）
+  const SHRINK = 0.6; // 濁点の長さを60%に縮小
   const n = groups.length;
 
+  // 何画が濁点・半濁点マークなのかを、文字そのものから確定させる
+  let markCount = 0;
+  if(DAKUTEN_CHARS.has(curChar)) markCount = 2;
+  else if(HANDAKUTEN_CHARS.has(curChar)) markCount = 1;
+  if(markCount === 0) return; // 濁点・半濁点を持たない文字は何もしない
+
   groups.forEach((g, i) => {
-    if(g.isManualStroke) return; // 手動補正済みの画は濁点判定の対象外
+    if(g.isManualStroke) return; // 手動補正済みの画は対象外
     const pts = g.median;
     if(!pts || pts.length < 2) return;
 
-    const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
-    const w = Math.max(...xs) - Math.min(...xs);
-    const h = Math.max(...ys) - Math.min(...ys);
-    const size = Math.max(w, h);
-    const avgX = xs.reduce((a,b)=>a+b,0) / xs.length;
-
-    // 濁点・半濁点の典型パターン：最後の2画以内、文字の右側、サイズが小さい
-    const isLastTwo = i >= n - 2;
-    const isDakuten = isLastTwo && avgX > 600 && size < 260;
+    const isDakuten = i >= n - markCount;
 
     if(isDakuten) {
       g.isDakuten = true; // 後段の「クセ取り」処理から除外するための印
