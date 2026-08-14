@@ -84,6 +84,7 @@ canvas{ position:absolute;inset:0;width:100%;height:100%; }
 .btn-blue.on{ background:var(--green); }
 .btn-yellow{ background:var(--yellow);color:#7a5b00; }
 .btn-yellow.on{ background:var(--green);color:#fff; }
+.btn-purple{ background:#9b6bff; }
 
 .result-msg{
   font-size:1rem;font-weight:bold;min-height:1.6em;text-align:center;flex-shrink:0;
@@ -151,6 +152,7 @@ canvas{ position:absolute;inset:0;width:100%;height:100%; }
       <button class="s-btn btn-gray" onclick="clearDraw()">🗑 けす</button>
       <button class="s-btn btn-blue" id="ref-toggle-btn" onclick="toggleRef()">👀 おてほん</button>
       <button class="s-btn btn-yellow" id="num-toggle-btn" onclick="toggleNumbers()">① ばんごう</button>
+      <button class="s-btn btn-purple" onclick="playAnim()">▶ うごかす</button>
       <button class="s-btn btn-pink" onclick="checkDraw()">✓ かくにんする</button>
     </div>
 
@@ -208,12 +210,235 @@ const H2K = {
 const ENC = ["すごい！","やったね！","じょうずだね！","かんぺき！","ばっちり！"];
 
 // ============================================================
+// お手本データの補正（kana-writing.html と同じロジックを移植）
+// ============================================================
+// データ元(kana-svg-data)の書き順が実際の標準と異なる文字を、id順で上書き修正する
+const STROKE_ORDER_OVERRIDES = {
+  'も': ['3', '1', '2'],
+};
+function applyStrokeOrderOverride(ch, data) {
+  const order = STROKE_ORDER_OVERRIDES[ch];
+  if (!order || !data) return data;
+  const reorder = (arr) => {
+    if (!arr) return arr;
+    const map = new Map(arr.map(item => [item.id, item]));
+    const result = [];
+    order.forEach(id => { if (map.has(id)) { result.push(map.get(id)); map.delete(id); } });
+    map.forEach(v => result.push(v));
+    return result;
+  };
+  data.strokes = reorder(data.strokes);
+  data.medians = reorder(data.medians);
+  return data;
+}
+
+// データ元の画の長さ（特にはらいの先端）を教育現場の標準的な形に補正する
+const STROKE_LENGTH_OVERRIDES = {
+  'ホ': { '4': 1.15 },
+  'ボ': { '4': 1.15 },
+  'ポ': { '4': 1.15 },
+  'ム': { '2': { replace: [[692, 558], [900, 850]] } },
+  // 「ま/よ/は」の縦画：最初の入りが、そのあとの直線区間に対して8〜10%しかない
+  // 極端に短い区間なのに、曲がる角度が緩め(55〜70°)でtrimEntryHookの閾値(70°超)に
+  // 届かず、Chaikin丸め処理でこの短い入りが誇張されて不自然なフックになるため、
+  // 最初の1点を削って素直な書き出しにする
+  'ま': { '3a': { replace: [[535, 122], [510, 879], [326, 903], [277, 862], [273, 821], [299, 786], [350, 761], [470, 782], [800, 911]] } },
+  'よ': { '2a': { replace: [[532, 164], [501, 827], [341, 864], [242, 812], [235, 718], [356, 671], [785, 913]] } },
+  'は': { '3a': { replace: [[708, 178], [694, 815], [500, 859], [411, 818], [407, 777], [433, 742], [484, 717], [644, 748], [868, 868]] } },
+};
+function applyStrokeLengthOverride(ch, data) {
+  const overrides = STROKE_LENGTH_OVERRIDES[ch];
+  if (!overrides || !data || !data.medians) return data;
+  data._lengthOverrideIds = Object.keys(overrides);
+  data.medians.forEach(m => {
+    const rule = overrides[m.id];
+    if (!rule || !m.value || m.value.length < 2) return;
+    if (typeof rule === 'number') {
+      const n = m.value.length;
+      const p0 = m.value[n-2], p1 = m.value[n-1];
+      const dx = p1[0]-p0[0], dy = p1[1]-p0[1];
+      m.value[n-1] = [p0[0] + dx*rule, p0[1] + dy*rule];
+    } else if (rule.scale) {
+      const [sx, sy] = m.value[0];
+      m.value = m.value.map(([x,y]) => [sx + (x-sx)*rule.scale, sy + (y-sy)*rule.scale]);
+    } else if (rule.replace) {
+      m.value = rule.replace.map(p => [...p]);
+    }
+  });
+  return data;
+}
+
+// 濁点・半濁点の画を検出するための文字一覧
+const DAKUTEN_CHARS = new Set('がぎぐげござじずぜぞだぢづでどばびぶべぼガギグゲゴザジズゼゾダヂヅデドバビブベボ');
+const HANDAKUTEN_CHARS = new Set('ぱぴぷぺぽパピプペポ');
+
+function shrinkDakuten(groups, ch) {
+  const SHRINK = 0.6;
+  const n = groups.length;
+  let markCount = 0;
+  if (DAKUTEN_CHARS.has(ch)) markCount = 2;
+  else if (HANDAKUTEN_CHARS.has(ch)) markCount = 1;
+  if (markCount === 0) return;
+  groups.forEach((g, i) => {
+    if (g.isManualStroke) return;
+    const pts = g.median;
+    if (!pts || pts.length < 2) return;
+    const isDakuten = i >= n - markCount;
+    if (isDakuten) {
+      g.isDakuten = true;
+      const cx = pts[0][0], cy = pts[0][1];
+      g.median = pts.map(p => [cx + (p[0]-cx) * SHRINK, cy + (p[1]-cy) * SHRINK]);
+    }
+  });
+}
+
+// 書き出しの「入り」の巻き込み（逆方向へのフック）を取り除く
+function trimEntryHook(pts) {
+  if (!pts || pts.length < 4) return pts;
+  let totalLen = 0;
+  for (let i=0;i<pts.length-1;i++){
+    totalLen += Math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]);
+  }
+  let out = pts.slice();
+  for (let pass = 0; pass < 2 && out.length >= 4; pass++) {
+    const p0 = out[0], p1 = out[1], p2 = out[2];
+    const v1x = p1[0]-p0[0], v1y = p1[1]-p0[1];
+    const v2x = p2[0]-p1[0], v2y = p2[1]-p1[1];
+    const len1 = Math.hypot(v1x,v1y), len2 = Math.hypot(v2x,v2y);
+    if (len1 < 1 || len2 < 1) break;
+    const dot = (v1x*v2x + v1y*v2y) / (len1*len2);
+    const isSharpTurn = dot < 0.34;
+    const isShortLeadIn = len1 < len2 * 0.6 && len1 < totalLen * 0.22;
+    if (isSharpTurn && isShortLeadIn) out = out.slice(1);
+    else break;
+  }
+  return out;
+}
+
+// 区間の長さのばらつきをならす：一定間隔で点を打ち直してからChaikinをかけることで、
+// 短い区間が密集する部分（輪の内側など）が周りの長い区間に引っぱられて
+// 不釣り合いに尖ってしまう（＝早く曲がりすぎる）のを防ぐ
+function resampleEvenly(pts, spacing) {
+  if (!pts || pts.length < 3) return pts;
+  const cum = [0];
+  for (let i = 0; i < pts.length - 1; i++) {
+    cum.push(cum[i] + Math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]));
+  }
+  const total = cum[cum.length-1];
+  if (total < spacing * 2) return pts;
+  const n = Math.max(2, Math.round(total / spacing));
+  const out = [];
+  for (let k = 0; k <= n; k++) {
+    const d = total * k / n;
+    let j = 0;
+    while (j < cum.length - 2 && cum[j+1] < d) j++;
+    const seg = (cum[j+1] - cum[j]) || 1;
+    const t = (d - cum[j]) / seg;
+    const p0 = pts[j], p1 = pts[j+1];
+    out.push([p0[0] + (p1[0]-p0[0])*t, p0[1] + (p1[1]-p0[1])*t]);
+  }
+  return out;
+}
+
+// 折れ角を丸める（Chaikinのコーナーカット）
+function softenMedian(pts, iterations) {
+  if (!pts || pts.length < 3) return pts;
+  iterations = iterations || 3;
+  let cur = pts;
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = [cur[0]];
+    for (let i = 0; i < cur.length - 1; i++) {
+      const p0 = cur[i], p1 = cur[i+1];
+      next.push([p0[0] + (p1[0]-p0[0])*0.25, p0[1] + (p1[1]-p0[1])*0.25]);
+      next.push([p0[0] + (p1[0]-p0[0])*0.75, p0[1] + (p1[1]-p0[1])*0.75]);
+    }
+    next.push(cur[cur.length-1]);
+    cur = next;
+  }
+  return cur;
+}
+
+// ストロークをグループ化（3a,3b → 画番号3としてまとめる）し、上記の補正一式を適用する
+function groupStrokes(data, ch) {
+  if (!data || !data.strokes) return [];
+  const map = new Map();
+  const order = [];
+  data.strokes.forEach(s => {
+    if (!s.value || !s.value.trim()) return;
+    const id = s.id;
+    const numKey = id.replace(/[a-z]$/, '');
+    const suffix = (id.match(/[a-z]$/) || [''])[0];
+    if (suffix && suffix !== 'a') return;
+    if (!map.has(numKey)) { map.set(numKey, {path:'', median:null}); order.push(numKey); }
+    map.get(numKey).path = s.value;
+    const med = (data.medians || []).find(m => m.id === id);
+    if (med) map.get(numKey).median = med.value;
+  });
+
+  const groups = order.map(k => map.get(k));
+  const overrideIds = data._lengthOverrideIds || [];
+  order.forEach(k => { if (overrideIds.includes(k)) map.get(k).isManualStroke = true; });
+
+  shrinkDakuten(groups, ch);
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = trimEntryHook(g.median); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 35); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = softenMedian(g.median); });
+
+  return groups;
+}
+
+// ============================================================
+// なめらか線描画（Catmull-Rom スプライン）
+// ============================================================
+const STROKE_COLORS = ['#ff9aa2','#ffb480','#ffd97a','#a8d8a0','#8fd4c9','#9ac6ef','#b6a8e0','#f2a6c9','#c9b29b','#8fc9dd'];
+function strokeColor(i) { return STROKE_COLORS[i % STROKE_COLORS.length]; }
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+function drawSmoothLine(ctx, pts, color, lw, withDot) {
+  if (!pts || pts.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1].x, pts[1].y);
+  } else {
+    for (let i=0; i<pts.length-1; i++) {
+      const p0 = pts[Math.max(0,i-1)];
+      const p1 = pts[i];
+      const p2 = pts[i+1];
+      const p3 = pts[Math.min(pts.length-1,i+2)];
+      const cp1x = p1.x + (p2.x-p0.x)/6;
+      const cp1y = p1.y + (p2.y-p0.y)/6;
+      const cp2x = p2.x - (p3.x-p1.x)/6;
+      const cp2y = p2.y - (p3.y-p1.y)/6;
+      ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,p2.x,p2.y);
+    }
+  }
+  ctx.stroke();
+  if (withDot) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(pts[0].x, pts[0].y, lw*0.6, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ============================================================
 // 状態
 // ============================================================
 let kind = 'hiragana';      // 'hiragana' | 'katakana' | 'mix'
 let selGyou = null;         // 選択中の行（nullなら全部からランダム）
 let curChar = 'あ';
+let curDisplayChar = 'あ';  // 実際に表示中の文字（ひらがな/カタカナどちらでも）
 let curData = null;         // フェッチした現在の文字データ(strokes/medians)
+let animRaf = null;         // 書き順アニメーションのrequestAnimationFrame ID
 let dataCache = {};         // key: "hiragana:あ" -> data
 let starTotal = 0;
 let streak = 0;
@@ -276,7 +501,9 @@ async function fetchCharData(k, ch) {
   const folder = k === 'katakana' ? 'katakana' : 'hiragana';
   const url = `${CDN}/${folder}/${encodeURIComponent(ch)}.json`;
   const res = await fetch(url);
-  const data = await res.json();
+  let data = await res.json();
+  data = applyStrokeOrderOverride(ch, data);
+  data = applyStrokeLengthOverride(ch, data);
   dataCache[key] = data;
   return data;
 }
@@ -323,6 +550,7 @@ function setupDrawCanvas() {
 }
 
 function clearDraw() {
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
   setupDrawCanvas();
   renderOverlay();
   setResult('', '');
@@ -369,25 +597,107 @@ function drawRefShape() {
   ctx.restore();
 }
 
-// 各画の始点に番号バッジだけを静止表示（アニメーションなし）
-// medians の id は "1a"/"1b" のように、1つの画を描画用に複数パスへ
-// 分割している場合がある。番号バッジ・矢印の起点となる「筆の入り」は
-// 常に先頭サブパスの始点であり、直後の動きの向きもそのサブパス自身の
-// 点列から求まるため、先頭サブパスだけを使えばよい。
-function strokeGroups() {
-  if (!curData || !curData.medians) return [];
+// ============================================================
+// 書き順アニメーション（medians を1画ずつ順番にCanvasに描画）
+// kana-writing.html の startAnim() を、お手本オーバーレイ用(cv-ref)に移植したもの
+// ============================================================
+function playAnim() {
+  if (!curData) return;
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
+
+  const groups = groupStrokes(curData, curDisplayChar).filter(g => g.median && g.median.length >= 2);
+  if (!groups.length) return;
+
+  clearCanvas(cvRef);
+  const ctx = cvRef.getContext('2d');
   const scale = cvSize / VBOX;
-  const order = [];
-  const seen = new Set();
-  curData.medians.forEach(m => {
-    if (!m.value || !m.value.length) return;
-    const key = String(m.id).replace(/[a-z]+$/i, '');
-    if (!seen.has(key)) {
-      seen.add(key);
-      order.push(m.value.map(([x, y]) => [x * scale, y * scale]));
+  const total = groups.length;
+  const doneStrokes = [];
+  let sIdx = 0, traveled = 0, curPts = null, curCum = null, curTotalLen = 0, perFrameDist = 0, pauseFrames = 0;
+
+  function loadStroke(i) { return groups[i].median.map(([x,y]) => ({x: x*scale, y: y*scale})); }
+  function buildCum(pts) {
+    const cum = [0];
+    for (let i=0;i<pts.length-1;i++) {
+      cum.push(cum[i] + Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y));
     }
+    return cum;
+  }
+  function sliceByLength(pts, cum, dist) {
+    const tot = cum[cum.length-1];
+    if (dist <= 0) return [pts[0]];
+    if (dist >= tot) return pts;
+    let k = 0;
+    while (k < cum.length-2 && cum[k+1] < dist) k++;
+    const segLen = (cum[k+1]-cum[k]) || 1;
+    const frac = (dist - cum[k]) / segLen;
+    const p0 = pts[k], p1 = pts[k+1];
+    const result = pts.slice(0, k+1);
+    result.push({x: p0.x+(p1.x-p0.x)*frac, y: p0.y+(p1.y-p0.y)*frac});
+    return result;
+  }
+  function strokeWidth(i) { return groups[i].isDakuten ? cvSize*0.028 : cvSize*0.058; }
+  function drawDone() { doneStrokes.forEach(d => drawSmoothLine(ctx, d.pts, hexToRgba(d.color, 0.8), d.width, false)); }
+  function setupStroke(i) {
+    curPts = loadStroke(i);
+    curCum = buildCum(curPts);
+    curTotalLen = curCum[curCum.length-1];
+    const targetFrames = Math.max(8, curTotalLen / (cvSize * 0.07));
+    perFrameDist = curTotalLen / targetFrames;
+    traveled = 0;
+  }
+
+  setupStroke(0);
+
+  function tick() {
+    if (pauseFrames > 0) { pauseFrames--; animRaf = requestAnimationFrame(tick); return; }
+    ctx.clearRect(0, 0, cvSize, cvSize);
+    drawDone();
+
+    const animPts = sliceByLength(curPts, curCum, traveled);
+    drawSmoothLine(ctx, animPts, hexToRgba(strokeColor(sIdx), 0.95), strokeWidth(sIdx), true);
+
+    traveled += perFrameDist;
+    if (traveled >= curTotalLen) {
+      doneStrokes.push({pts: curPts, color: strokeColor(sIdx), width: strokeWidth(sIdx)});
+      sIdx++;
+      if (sIdx >= total) {
+        ctx.clearRect(0, 0, cvSize, cvSize);
+        drawDone();
+        animRaf = null;
+        setTimeout(() => { if (!animRaf) renderOverlay(); }, 600); // お手本/ばんごうトグルの状態に戻す
+        return;
+      }
+      setupStroke(sIdx);
+      pauseFrames = 8;
+    }
+    animRaf = requestAnimationFrame(tick);
+  }
+  animRaf = requestAnimationFrame(tick);
+}
+
+// 各画の始点に番号バッジだけを静止表示（アニメーションなし）
+function drawStrokeNumbersStatic() {
+  if (!curData) return;
+  const groups = groupStrokes(curData, curDisplayChar);
+  if (!groups.length) return;
+  const scale = cvSize / VBOX;
+  const ctx = cvRef.getContext('2d');
+  groups.forEach((g, i) => {
+    if (!g.median || g.median.length < 2) return;
+    const pts = g.median.map(([x, y]) => [x * scale, y * scale]);
+    drawDirectionArrow(ctx, pts);
+    const [x, y] = pts[0];
+    ctx.beginPath();
+    ctx.arc(x, y, cvSize * (g.isDakuten ? 0.03 : 0.045), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,206,71,0.95)';
+    ctx.fill();
+    ctx.fillStyle = '#7a5b00';
+    ctx.font = 'bold ' + Math.round(cvSize * (g.isDakuten ? 0.06 : 0.08)) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1), x, y);
   });
-  return order;
 }
 
 // 点列に沿って、始点から指定ピクセル分だけ進んだ位置の座標を求める
@@ -433,25 +743,6 @@ function drawDirectionArrow(ctx, pts) {
   ctx.closePath();
   ctx.fill();
   ctx.restore();
-}
-
-function drawStrokeNumbersStatic() {
-  const groups = strokeGroups();
-  if (!groups.length) return;
-  const ctx = cvRef.getContext('2d');
-  groups.forEach((pts, i) => {
-    drawDirectionArrow(ctx, pts);
-    const [x, y] = pts[0];
-    ctx.beginPath();
-    ctx.arc(x, y, cvSize * 0.045, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,206,71,0.95)';
-    ctx.fill();
-    ctx.fillStyle = '#7a5b00';
-    ctx.font = 'bold ' + Math.round(cvSize * 0.08) + 'px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), x, y);
-  });
 }
 
 // ============================================================
@@ -549,10 +840,12 @@ function pickKindForChar() {
 }
 
 async function loadNewChar() {
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
   const hiraChar = pickChar();
   curChar = hiraChar;
   const useKind = pickKindForChar();
   const displayChar = useKind === 'katakana' ? H2K[hiraChar] : hiraChar;
+  curDisplayChar = displayChar;
 
   document.getElementById('prompt-kana').textContent = displayChar;
   document.getElementById('loading').style.display = 'flex';
