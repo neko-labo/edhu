@@ -527,6 +527,42 @@ function App() {
 
   const renameMaterial = (id, name) => setMaterials(p => p.map(m => m.id===id ? {...m,name} : m));
 
+  const importImageAsMaterial = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.onchange = e => {
+      const file = e.target.files[0]; if (!file) return;
+      setStatus("画像を読み込み中...");
+      const rd = new FileReader();
+      rd.onload = ev => {
+        const dataURL = ev.target.result;
+        const img = new Image();
+        img.onload = () => {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          const maxDim = 160;
+          if (w > maxDim || h > maxDim) {
+            const scale = Math.min(maxDim / w, maxDim / h);
+            w = Math.max(1, Math.round(w * scale));
+            h = Math.max(1, Math.round(h * scale));
+          }
+          const id = nmid();
+          const name = (file.name || ("素材" + id)).replace(/\.[^.]+$/, '').slice(0, 20) || ("素材 " + id);
+          const mat = { id, name, dataURL, w, h };
+          imgCache.current[id] = img;
+          setMaterials(p => [...p, mat]);
+          setBTab('materials');
+          setStatus("✓「" + name + "」を素材として読み込みました");
+        };
+        img.onerror = () => setStatus("✗ 画像の読み込みに失敗しました");
+        img.src = dataURL;
+      };
+      rd.onerror = () => setStatus("✗ ファイルの読み込みに失敗しました");
+      rd.readAsDataURL(file);
+    };
+    inp.click();
+  };
+
   const activateStamp = mat => {
     const img = imgCache.current[mat.id] || (() => { const i=new Image(); i.src=mat.dataURL; imgCache.current[mat.id]=i; return i; })();
     setStampMat(mat);
@@ -773,9 +809,13 @@ function App() {
 
         {bottomTab === 'materials' && (
           <div style={{ height:100, display:'flex', alignItems:'flex-start', gap:8, padding:'8px 12px', overflowX:'auto', overflowY:'hidden' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0, marginRight:6 }}>
+              <SB onClick={importImageAsMaterial} title="画像ファイルを素材として読み込む" style={{ background:'#ffe6f0', color:'#c44569', fontWeight:700 }}>📥 画像を<br/>読み込む</SB>
+            </div>
+            <div style={{ width:1, height:80, background:'rgba(0,0,0,0.1)', flexShrink:0, marginRight:2 }} />
             {materials.length === 0 ? (
               <div style={{ color:'#999', fontSize:11, padding:'12px 6px', lineHeight:1.8, flexShrink:0 }}>
-                選択ツールで範囲を選び<br/>「📌 素材に保存」で登録
+                選択ツールで範囲を選ぶか、<br/>画像を読み込んで登録
               </div>
             ) : materials.map(mat => (
               <div key={mat.id} style={{ flexShrink:0, display:'flex', flexDirection:'column', gap:3, alignItems:'center', width:90 }}>
