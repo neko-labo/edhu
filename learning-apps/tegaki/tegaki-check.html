@@ -381,7 +381,7 @@ function groupStrokes(data, ch) {
 
   shrinkDakuten(groups, ch);
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = trimEntryHook(g.median); });
-  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 8); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 35); });
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = softenMedian(g.median); });
 
   return groups;
@@ -470,7 +470,14 @@ function calcSize() {
   cvSize = Math.max(180, Math.floor(avail));
   wrap.style.width = cvSize + 'px';
   wrap.style.height = cvSize + 'px';
-  [cvGrid, cvRef, cvDraw].forEach(c => { c.width = cvSize; c.height = cvSize; });
+  // devicePixelRatio分だけ実解像度を上げてから、setTransformで論理座標系(cvSize基準)に戻す。
+  // これをしないと高精細ディスプレイで曲線のアンチエイリアスが粗くなり、ギザギザに見える。
+  const dpr = window.devicePixelRatio || 1;
+  [cvGrid, cvRef, cvDraw].forEach(c => {
+    c.width = Math.round(cvSize * dpr);
+    c.height = Math.round(cvSize * dpr);
+    c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  });
   drawGridBackground();
 }
 window.addEventListener('resize', () => { calcSize(); });
@@ -529,7 +536,9 @@ function setupDrawCanvas() {
     const r = cvDraw.getBoundingClientRect();
     const cx = e.touches ? (e.touches[0]||e.changedTouches[0]).clientX : e.clientX;
     const cy = e.touches ? (e.touches[0]||e.changedTouches[0]).clientY : e.clientY;
-    return { x: (cx - r.left) * (cvDraw.width / r.width), y: (cy - r.top) * (cvDraw.height / r.height) };
+    // cvDraw.width/height は devicePixelRatio 分だけ大きい実解像度なので、
+    // 描画に使う論理座標系(cvSize基準)に合わせて cvSize を基準に変換する
+    return { x: (cx - r.left) * (cvSize / r.width), y: (cy - r.top) * (cvSize / r.height) };
   };
 
   cvDraw.onpointerdown = e => {
@@ -613,7 +622,15 @@ function playAnim() {
   const scale = cvSize / VBOX;
   const total = groups.length;
   const doneStrokes = [];
-  let sIdx = 0, traveled = 0, curPts = null, curCum = null, curTotalLen = 0, perFrameDist = 0, pauseFrames = 0;
+  let sIdx = 0, traveled = 0, curPts = null, curCum = null, curTotalLen = 0, curSpeed = 0;
+  let lastTs = null, pauseUntil = 0;
+
+  // フレーム数ではなく経過時間(ms)ベースで進める。
+  // こうすることで画面のリフレッシュレート(60Hz/90Hz/120Hz等)や端末の負荷に左右されず、
+  // どの端末でも同じ速さ・同じ滑らかさで再生される。
+  const BASE_SPEED = cvSize * 1.55;   // 基準速度 (px/秒)
+  const MIN_DURATION = 260;           // 1画あたりの最短表示時間(ms)。短い画が一瞬で飛ぶのを防ぐ
+  const PAUSE_MS = 180;               // 画と画の間の一時停止(ms)
 
   function loadStroke(i) { return groups[i].median.map(([x,y]) => ({x: x*scale, y: y*scale})); }
   function buildCum(pts) {
@@ -642,22 +659,29 @@ function playAnim() {
     curPts = loadStroke(i);
     curCum = buildCum(curPts);
     curTotalLen = curCum[curCum.length-1];
-    const targetFrames = Math.max(18, curTotalLen / (cvSize * 0.03));
-    perFrameDist = curTotalLen / targetFrames;
+    // 距離が短い画でも最低表示時間を確保しつつ、長い画は基準速度で描く
+    const duration = Math.max(MIN_DURATION, (curTotalLen / BASE_SPEED) * 1000);
+    curSpeed = curTotalLen / (duration / 1000);
     traveled = 0;
   }
 
   setupStroke(0);
 
-  function tick() {
-    if (pauseFrames > 0) { pauseFrames--; animRaf = requestAnimationFrame(tick); return; }
+  function tick(ts) {
+    if (lastTs === null) lastTs = ts;
+    // タブ切り替え直後などの大きすぎるdtは無視して、飛び跳ねを防ぐ
+    const dt = Math.min(48, ts - lastTs);
+    lastTs = ts;
+
+    if (ts < pauseUntil) { animRaf = requestAnimationFrame(tick); return; }
+
     ctx.clearRect(0, 0, cvSize, cvSize);
     drawDone();
 
     const animPts = sliceByLength(curPts, curCum, traveled);
     drawSmoothLine(ctx, animPts, hexToRgba(strokeColor(sIdx), 0.95), strokeWidth(sIdx), true);
 
-    traveled += perFrameDist;
+    traveled += curSpeed * (dt / 1000);
     if (traveled >= curTotalLen) {
       doneStrokes.push({pts: curPts, color: strokeColor(sIdx), width: strokeWidth(sIdx)});
       sIdx++;
@@ -669,7 +693,7 @@ function playAnim() {
         return;
       }
       setupStroke(sIdx);
-      pauseFrames = 18;
+      pauseUntil = ts + PAUSE_MS;
     }
     animRaf = requestAnimationFrame(tick);
   }
