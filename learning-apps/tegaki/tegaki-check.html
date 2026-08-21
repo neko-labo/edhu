@@ -358,6 +358,38 @@ function softenMedian(pts, iterations) {
   return cur;
 }
 
+// 鋭く折れている頂点だけを検出して、そこだけ追加でChaikinカットする。
+// softenMedianは全体を均一に丸めるが、ゆるいカーブまで丸めすぎると文字の形が崩れる。
+// なので「への字」のようにきつく折れている箇所だけをピンポイントで滑らかにする。
+function roundSharpCorners(pts, extraPasses, angleThreshold) {
+  if (!pts || pts.length < 5) return pts;
+  extraPasses = extraPasses || 2;
+  angleThreshold = angleThreshold != null ? angleThreshold : 0.55; // 内積がこれより小さい=鋭い角
+  let cur = pts;
+  for (let pass = 0; pass < extraPasses; pass++) {
+    const next = [cur[0]];
+    for (let i = 1; i < cur.length - 1; i++) {
+      const p0 = cur[i-1], p1 = cur[i], p2 = cur[i+1];
+      const v1x = p1[0]-p0[0], v1y = p1[1]-p0[1];
+      const v2x = p2[0]-p1[0], v2y = p2[1]-p1[1];
+      const len1 = Math.hypot(v1x,v1y), len2 = Math.hypot(v2x,v2y);
+      if (len1 < 1 || len2 < 1) { next.push(p1); continue; }
+      const dot = (v1x*v2x + v1y*v2y) / (len1*len2);
+      if (dot < angleThreshold) {
+        // 鋭い角の頂点だけをChaikin風に2点へ置き換えて丸める
+        const cut = 0.3;
+        next.push([p0[0]+(p1[0]-p0[0])*(1-cut), p0[1]+(p1[1]-p0[1])*(1-cut)]);
+        next.push([p1[0]+(p2[0]-p1[0])*cut, p1[1]+(p2[1]-p1[1])*cut]);
+      } else {
+        next.push(p1);
+      }
+    }
+    next.push(cur[cur.length-1]);
+    cur = next;
+  }
+  return cur;
+}
+
 // ストロークをグループ化（3a,3b → 画番号3としてまとめる）し、上記の補正一式を適用する
 function groupStrokes(data, ch) {
   if (!data || !data.strokes) return [];
@@ -381,8 +413,9 @@ function groupStrokes(data, ch) {
 
   shrinkDakuten(groups, ch);
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = trimEntryHook(g.median); });
-  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 35); });
-  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = softenMedian(g.median); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 20); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = softenMedian(g.median, 4); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = roundSharpCorners(g.median, 3); });
 
   return groups;
 }
@@ -621,9 +654,18 @@ function playAnim() {
   const ctx = cvRef.getContext('2d');
   const scale = cvSize / VBOX;
   const total = groups.length;
-  const doneStrokes = [];
   let sIdx = 0, traveled = 0, curPts = null, curCum = null, curTotalLen = 0, curSpeed = 0;
   let lastTs = null, pauseUntil = 0;
+
+  // 完了した画を「毎フレーム再計算」せず、専用のオフスクリーンcanvasに1回だけ焼き込んでキャッシュする。
+  // 画数の多い文字を毎フレーム全部Catmull-Romで引き直すのはCPU負荷が高く、
+  // 非力な端末(Chromebook等)だとコマ落ちして「カクカク」動いて見える原因になるため。
+  const dpr = window.devicePixelRatio || 1;
+  const doneCanvas = document.createElement('canvas');
+  doneCanvas.width = cvRef.width;
+  doneCanvas.height = cvRef.height;
+  const doneCtx = doneCanvas.getContext('2d');
+  doneCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   // フレーム数ではなく経過時間(ms)ベースで進める。
   // こうすることで画面のリフレッシュレート(60Hz/90Hz/120Hz等)や端末の負荷に左右されず、
@@ -654,7 +696,6 @@ function playAnim() {
     return result;
   }
   function strokeWidth(i) { return groups[i].isDakuten ? cvSize*0.028 : cvSize*0.058; }
-  function drawDone() { doneStrokes.forEach(d => drawSmoothLine(ctx, d.pts, hexToRgba(d.color, 0.8), d.width, false)); }
   function setupStroke(i) {
     curPts = loadStroke(i);
     curCum = buildCum(curPts);
@@ -675,19 +716,28 @@ function playAnim() {
 
     if (ts < pauseUntil) { animRaf = requestAnimationFrame(tick); return; }
 
-    ctx.clearRect(0, 0, cvSize, cvSize);
-    drawDone();
+    // 完了済みの画はキャッシュ画像を等倍コピーするだけ(再計算なし)。
+    // drawImageで転写する間だけ変換行列を単位行列に戻し、二重スケールを防ぐ。
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cvRef.width, cvRef.height);
+    ctx.drawImage(doneCanvas, 0, 0);
+    ctx.restore();
 
     const animPts = sliceByLength(curPts, curCum, traveled);
     drawSmoothLine(ctx, animPts, hexToRgba(strokeColor(sIdx), 0.95), strokeWidth(sIdx), true);
 
     traveled += curSpeed * (dt / 1000);
     if (traveled >= curTotalLen) {
-      doneStrokes.push({pts: curPts, color: strokeColor(sIdx), width: strokeWidth(sIdx)});
+      // この画が完成したので、キャッシュcanvasに1回だけ焼き込む
+      drawSmoothLine(doneCtx, curPts, hexToRgba(strokeColor(sIdx), 0.8), strokeWidth(sIdx), false);
       sIdx++;
       if (sIdx >= total) {
-        ctx.clearRect(0, 0, cvSize, cvSize);
-        drawDone();
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, cvRef.width, cvRef.height);
+        ctx.drawImage(doneCanvas, 0, 0);
+        ctx.restore();
         animRaf = null;
         setTimeout(() => { if (!animRaf) renderOverlay(); }, 600); // お手本/ばんごうトグルの状態に戻す
         return;
