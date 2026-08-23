@@ -319,7 +319,7 @@ function trimEntryHook(pts) {
 // 短い区間が密集する部分（輪の内側など）が周りの長い区間に引っぱられて
 // 不釣り合いに尖ってしまう（＝早く曲がりすぎる）のを防ぐ
 function resampleEvenly(pts, spacing) {
-  if (!pts || pts.length < 3) return pts;
+  if (!pts || pts.length < 2) return pts;
   const cum = [0];
   for (let i = 0; i < pts.length - 1; i++) {
     cum.push(cum[i] + Math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]));
@@ -390,8 +390,32 @@ function roundSharpCorners(pts, extraPasses, angleThreshold) {
   return cur;
 }
 
+// 近傍の点をなだらかにブレンドする移動平均(ラプラシアン)スムージング。
+// roundSharpCornersは「1点だけ突出して鋭い角」には効くが、細かい折れが連続する
+// ループ部分などは1点判定だとすり抜けてしまう。これは各点を前後の点の中間へ
+// 少しずつ寄せることで、連続した小さなガタつきをまとめて均す最終仕上げ用。
+// factorを上げすぎたり回数を増やしすぎると、ループが縮んで文字の形が崩れるので控えめにする。
+function laplacianSmooth(pts, iterations, factor) {
+  if (!pts || pts.length < 3) return pts;
+  iterations = iterations || 2;
+  factor = factor != null ? factor : 0.5;
+  let cur = pts;
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = [cur[0]];
+    for (let i = 1; i < cur.length - 1; i++) {
+      const p0 = cur[i-1], p1 = cur[i], p2 = cur[i+1];
+      const avgX = (p0[0] + p2[0]) / 2;
+      const avgY = (p0[1] + p2[1]) / 2;
+      next.push([p1[0] + (avgX - p1[0]) * factor, p1[1] + (avgY - p1[1]) * factor]);
+    }
+    next.push(cur[cur.length-1]);
+    cur = next;
+  }
+  return cur;
+}
+
 // ストロークをグループ化（3a,3b → 画番号3としてまとめる）し、上記の補正一式を適用する
-function groupStrokes(data, ch) {
+function groupStrokes(data, ch, skipSmoothing) {
   if (!data || !data.strokes) return [];
   const map = new Map();
   const order = [];
@@ -400,14 +424,32 @@ function groupStrokes(data, ch) {
     const id = s.id;
     const numKey = id.replace(/[a-z]$/, '');
     const suffix = (id.match(/[a-z]$/) || [''])[0];
-    if (suffix && suffix !== 'a') return;
     if (!map.has(numKey)) { map.set(numKey, {path:'', median:null}); order.push(numKey); }
-    map.get(numKey).path = s.value;
-    const med = (data.medians || []).find(m => m.id === id);
-    if (med) map.get(numKey).median = med.value;
+    const g = map.get(numKey);
+    // 輪郭(path)は a/b/c... の全パーツを連結して、そのストローク本来の完全な形にする。
+    // (う・え・み・ま・お等のループを含む画は輪郭が複数パーツに分かれていることがあり、
+    //  以前はmedian用のフィルタを流用して'a'以外を捨てていたため、輪郭の一部が欠けていた)
+    g.path += (g.path ? ' ' : '') + s.value;
+    // medianは代表となる'a'(または接尾辞なし)のものだけを使う(これは従来通り)
+    if (!suffix || suffix === 'a') {
+      const med = (data.medians || []).find(m => m.id === id);
+      if (med) g.median = med.value;
+    }
   });
 
   const groups = order.map(k => map.get(k));
+
+  // skipSmoothing=true の場合(アニメーションのなぞり位置制御用)は、見た目をなめらかにする
+  // 一連の補正(角丸め・移動平均など、位置をペンの軌跡からズラしてしまう可能性がある補正)は
+  // かけない。ただし点の間隔を均等に詰める処理(resampleEvenly、直線補間なので形は歪めない)
+  // だけは行う。生のmedianは点の間隔がまちまちで、時には大きく空いていることがあり、
+  // 点ごとに円を置くマスク方式だと間隔がマスクの太さを超えた場所で隙間ができて
+  // 線が途切れて見えてしまうため。
+  if (skipSmoothing) {
+    groups.forEach(g => { if (g.median) g.median = resampleEvenly(g.median, 15); });
+    return groups;
+  }
+
   const overrideIds = data._lengthOverrideIds || [];
   order.forEach(k => { if (overrideIds.includes(k)) map.get(k).isManualStroke = true; });
 
@@ -416,6 +458,7 @@ function groupStrokes(data, ch) {
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = resampleEvenly(g.median, 20); });
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = softenMedian(g.median, 4); });
   groups.forEach(g => { if (g.median && !g.isDakuten) g.median = roundSharpCorners(g.median, 3); });
+  groups.forEach(g => { if (g.median && !g.isDakuten) g.median = laplacianSmooth(g.median, 2, 0.5); });
 
   return groups;
 }
@@ -460,6 +503,127 @@ function drawSmoothLine(ctx, pts, color, lw, withDot) {
     ctx.arc(pts[0].x, pts[0].y, lw*0.6, 0, Math.PI*2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+// ============================================================
+// 毛筆風・可変太さの線描画
+// ============================================================
+// 一定の太さの丸線は、カーブがきつい場所ほど丸い継ぎ目が「ぷっくり」膨らんで見える。
+// 毛筆のように、線の始まり/終わり(穂先)と折れがきつい場所を少し細くすることで、
+// その膨らみ自体を目立たなくし、点の位置調整だけに頼らずになめらかに見せる。
+
+// 各点の接線ベクトル(前後の点を結ぶ向き)を求める
+function computeTangents(pts) {
+  const n = pts.length;
+  const tangents = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[Math.min(n - 1, i + 1)];
+    const dx = p1.x - p0.x, dy = p1.y - p0.y;
+    const len = Math.hypot(dx, dy) || 1;
+    tangents.push({ x: dx / len, y: dy / len });
+  }
+  return tangents;
+}
+
+// 数値配列版の移動平均（太さの変化を急にしないため）
+function laplacianSmooth1D(arr, iterations, factor) {
+  let cur = arr.slice();
+  for (let it = 0; it < iterations; it++) {
+    const next = cur.slice();
+    for (let i = 1; i < cur.length - 1; i++) {
+      const avg = (cur[i - 1] + cur[i + 1]) / 2;
+      next[i] = cur[i] + (avg - cur[i]) * factor;
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+// 各点ごとの太さプロファイルを作る：穂先(始点/終点)を細く、折れが鋭い場所も少し細く
+function computeWidthProfile(pts, baseWidth) {
+  const n = pts.length;
+  const widths = new Array(n).fill(baseWidth);
+
+  const taperCount = Math.max(3, Math.min(7, Math.floor(n * 0.22)));
+  for (let i = 0; i < taperCount; i++) {
+    const t = i / taperCount;
+    const eased = t * t * (3 - 2 * t); // スムーズステップ：線形より穏やかに立ち上がる
+    const factor = 0.55 + 0.45 * eased; // 穂先は55%の太さから徐々にフルへ
+    widths[i] *= factor;
+    widths[n - 1 - i] *= factor;
+  }
+
+  for (let i = 1; i < n - 1; i++) {
+    const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1];
+    const v1x = p1.x - p0.x, v1y = p1.y - p0.y;
+    const v2x = p2.x - p1.x, v2y = p2.y - p1.y;
+    const len1 = Math.hypot(v1x, v1y), len2 = Math.hypot(v2x, v2y);
+    if (len1 < 0.5 || len2 < 0.5) continue;
+    const dot = (v1x * v2x + v1y * v2y) / (len1 * len2); // 1=直進、低いほど鋭角
+    if (dot < 0.85) {
+      const bend = Math.max(0, Math.min(1, (0.85 - dot) / 0.85));
+      widths[i] *= (1 - bend * 0.3); // 最大30%細く
+    }
+  }
+
+  return laplacianSmooth1D(widths, 2, 0.5);
+}
+
+// スムーズ曲線のパスをcanvasパスに追加するだけ（stroke/fillはしない）
+function tracePolylineSmooth(ctx, pts, continuePath) {
+  if (!pts || pts.length === 0) return;
+  if (!continuePath) ctx.moveTo(pts[0].x, pts[0].y);
+  else ctx.lineTo(pts[0].x, pts[0].y);
+  if (pts.length === 1) return;
+  if (pts.length === 2) { ctx.lineTo(pts[1].x, pts[1].y); return; }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
+}
+
+// 毛筆のような可変太さのリボンを塗りつぶしで描画
+function drawBrushStroke(ctx, pts, color, widthOrArray, withDot) {
+  if (!pts || pts.length < 2) return;
+  const baseWidthForFallback = Array.isArray(widthOrArray) ? widthOrArray[widthOrArray.length - 1] : widthOrArray;
+  if (pts.length < 4) { drawSmoothLine(ctx, pts, color, baseWidthForFallback, false); return; }
+
+  const n = pts.length;
+  const tangents = computeTangents(pts);
+  // 太さは「事前計算済みの配列」がそのまま渡ってくることを想定。
+  // (アニメーション中に部分配列から毎回再計算すると、穂先の判定がずれてガタつく原因になるため)
+  const widths = Array.isArray(widthOrArray) ? widthOrArray : computeWidthProfile(pts, widthOrArray);
+
+  const left = [], right = [];
+  for (let i = 0; i < n; i++) {
+    const t = tangents[i];
+    const nx = -t.y, ny = t.x; // 接線を90度回転させた法線
+    const w = widths[i] / 2;
+    left.push({ x: pts[i].x + nx * w, y: pts[i].y + ny * w });
+    right.push({ x: pts[i].x - nx * w, y: pts[i].y - ny * w });
+  }
+
+  const t0 = tangents[0], tn = tangents[n - 1];
+  const a0 = Math.atan2(t0.y, t0.x), an = Math.atan2(tn.y, tn.x);
+
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  tracePolylineSmooth(ctx, left, false);
+  ctx.arc(pts[n - 1].x, pts[n - 1].y, widths[n - 1] / 2, an - Math.PI / 2, an + Math.PI / 2);
+  tracePolylineSmooth(ctx, right.slice().reverse(), true);
+  ctx.arc(pts[0].x, pts[0].y, widths[0] / 2, a0 + Math.PI / 2, a0 - Math.PI / 2);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -647,19 +811,17 @@ function playAnim() {
   if (!curData) return;
   if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
 
-  const groups = groupStrokes(curData, curDisplayChar).filter(g => g.median && g.median.length >= 2);
+  const groups = groupStrokes(curData, curDisplayChar, true).filter(g => g.median && g.median.length >= 2 && g.path);
   if (!groups.length) return;
 
   clearCanvas(cvRef);
   const ctx = cvRef.getContext('2d');
   const scale = cvSize / VBOX;
   const total = groups.length;
-  let sIdx = 0, traveled = 0, curPts = null, curCum = null, curTotalLen = 0, curSpeed = 0;
+  let sIdx = 0, traveled = 0, curPts = null, curCum = null, curTotalLen = 0, curSpeed = 0, curPath2D = null, curMaskW = 0;
   let lastTs = null, pauseUntil = 0;
 
   // 完了した画を「毎フレーム再計算」せず、専用のオフスクリーンcanvasに1回だけ焼き込んでキャッシュする。
-  // 画数の多い文字を毎フレーム全部Catmull-Romで引き直すのはCPU負荷が高く、
-  // 非力な端末(Chromebook等)だとコマ落ちして「カクカク」動いて見える原因になるため。
   const dpr = window.devicePixelRatio || 1;
   const doneCanvas = document.createElement('canvas');
   doneCanvas.width = cvRef.width;
@@ -667,14 +829,14 @@ function playAnim() {
   const doneCtx = doneCanvas.getContext('2d');
   doneCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // フレーム数ではなく経過時間(ms)ベースで進める。
-  // こうすることで画面のリフレッシュレート(60Hz/90Hz/120Hz等)や端末の負荷に左右されず、
-  // どの端末でも同じ速さ・同じ滑らかさで再生される。
-  const BASE_SPEED = cvSize * 1.55;   // 基準速度 (px/秒)
-  const MIN_DURATION = 260;           // 1画あたりの最短表示時間(ms)。短い画が一瞬で飛ぶのを防ぐ
-  const PAUSE_MS = 180;               // 画と画の間の一時停止(ms)
+  // フレーム数ではなく経過時間(ms)ベースで進める（端末のリフレッシュレート/負荷に依存しない）
+  const BASE_SPEED = cvSize * 1.9;    // 基準速度 (px/秒)
+  const MIN_DURATION = 200;           // 1画あたりの最短表示時間(ms)
+  const PAUSE_MS = 130;               // 画と画の間の一時停止(ms)
 
-  function loadStroke(i) { return groups[i].median.map(([x,y]) => ({x: x*scale, y: y*scale})); }
+  // 点はVBOX(1024)の生座標のまま扱う。クリップ(本物の輪郭)となぞる線を
+  // 同じ変換(scale)の中で一緒に描くことで、ズレなく重ねられる。
+  function loadStroke(i) { return groups[i].median.map(([x,y]) => ({x, y})); }
   function buildCum(pts) {
     const cum = [0];
     for (let i=0;i<pts.length-1;i++) {
@@ -695,12 +857,82 @@ function playAnim() {
     result.push({x: p0.x+(p1.x-p0.x)*frac, y: p0.y+(p1.y-p0.y)*frac});
     return result;
   }
-  function strokeWidth(i) { return groups[i].isDakuten ? cvSize*0.028 : cvSize*0.058; }
+  // なぞる線の太さ(VBOX単位)。本物の輪郭でクリップされるので、多少太すぎても
+  // はみ出しようがない。むしろ太いほうがループの奥まで確実に届いて安全。
+  // kana-svg-dataの公式サンプルが使っている太さ(1024空間でstroke-width:128、
+  // つまりVBOXの約0.125倍)を参考値にする。太すぎるとクリップ自体は正確でも、
+  // まだペンが到達していない場所にたまたま近い本物の輪郭が先に見えてしまうため、
+  // 「安全のためにとにかく太く」ではなく、この基準に近い値にとどめる。
+  // なぞる線の太さ(見える線そのもの)。本物の輪郭でクリップされるので、
+  // ある程度太くても「本物の形からはみ出す」ことはない。
+  function traceLineWidth(i) { return groups[i].isDakuten ? VBOX*0.05 : VBOX*0.10; }
+  // 時間差マスクの太さ(これまでなぞってきた場所の近くだけに限定する)。
+  // これはフック/自己交差のある画で、まだ2回目に通っていない側が
+  // 1回目の通過だけで先に見えてしまうのを防ぐためのもの。
+  // 時間差マスクの太さ(これまでなぞってきた場所の近くだけに限定する)。
+  // これはフック/自己交差のある画で、まだ2回目に通っていない側が
+  // 1回目の通過だけで先に見えてしまうのを防ぐためのもの。
+  // ただし画自体がとても短い場合、この固定太さだと画の長さに対して
+  // 相対的に「育ちきるまでの数フレーム」の割合が大きくなり、
+  // 一瞬途切れて見えることがあるため、画の全長に応じた下限も設ける。
+  function maskWidthFor(i, totalLen) {
+    const base = groups[i].isDakuten ? VBOX*0.08 : VBOX*0.16;
+    return Math.max(base, totalLen * 0.35);
+  }
+
+  // 本物の輪郭パス(=フォント品質のなめらかな曲線)でクリップした状態で、
+  // medianに沿った太い線をなぞって描く。
+  // これはkana-svg-dataの公式サンプル(clipPathをstrokeの輪郭そのものに使う方式)と同じ考え方。
+  // 見えている境界は常に本物の輪郭なので、なぞる線がどれだけ太くても・粗くても
+  // 「本物の形からはみ出す」ことは原理的に起こらない。
+  function drawStrokeClipped(targetCtx, pts, path2D, lineWidth, maskWidth, color) {
+    targetCtx.save();
+    targetCtx.scale(scale, scale); // 以降すべてVBOX座標系で作業
+    // 1. 本物の輪郭で正確にクリップ(これだけだと、同じ場所をペンが2回通る
+    //    フック/自己交差のある画で、1回目の通過時に2回目の分まで見えてしまう)
+    targetCtx.clip(path2D);
+    // 2. さらに「これまでなぞってきた場所の近く」だけに限定するクリップを重ねる。
+    //    これで、まだペン先が到達していない側(2回目に通る側)は弾かれる。
+    targetCtx.beginPath();
+    const r = maskWidth / 2;
+    pts.forEach(p => { targetCtx.moveTo(p.x + r, p.y); targetCtx.arc(p.x, p.y, r, 0, Math.PI * 2); });
+    targetCtx.clip();
+    // 3. 2つのクリップが重なった部分だけに、太い線でなぞる
+    targetCtx.strokeStyle = color;
+    targetCtx.lineWidth = lineWidth;
+    targetCtx.lineCap = 'round';
+    targetCtx.lineJoin = 'round';
+    targetCtx.beginPath();
+    pts.forEach((p, i) => { if (i === 0) targetCtx.moveTo(p.x, p.y); else targetCtx.lineTo(p.x, p.y); });
+    targetCtx.stroke();
+    targetCtx.restore();
+  }
+
+  // 画が完成した時の焼き込み専用。drawStrokeClippedは「なぞる線」を細い太さで
+  // stroke()するだけなので、本物の輪郭の太い部分まで塗りきれないことがある。
+  // 完成形は二重クリップ(本物の輪郭×画全体を覆うマスク)の中を、本物の輪郭で
+  // まるごとfill()して、太さも含めて完全に正しい形にする。
+  // (このデータセットは、ある画の輪郭パスの中に「他の画のためのクリップ用の影」
+  //  が余分に埋め込まれていることがあるため、クリップなしでは絶対に塗らない)
+  function bakeStrokeClipped(targetCtx, pts, path2D, maskWidth, color) {
+    targetCtx.save();
+    targetCtx.scale(scale, scale);
+    targetCtx.clip(path2D);
+    targetCtx.beginPath();
+    const r = maskWidth / 2;
+    pts.forEach(p => { targetCtx.moveTo(p.x + r, p.y); targetCtx.arc(p.x, p.y, r, 0, Math.PI * 2); });
+    targetCtx.clip();
+    targetCtx.fillStyle = color;
+    targetCtx.fill(path2D);
+    targetCtx.restore();
+  }
+
   function setupStroke(i) {
     curPts = loadStroke(i);
     curCum = buildCum(curPts);
     curTotalLen = curCum[curCum.length-1];
-    // 距離が短い画でも最低表示時間を確保しつつ、長い画は基準速度で描く
+    curMaskW = maskWidthFor(i, curTotalLen);
+    curPath2D = new Path2D(groups[i].path);
     const duration = Math.max(MIN_DURATION, (curTotalLen / BASE_SPEED) * 1000);
     curSpeed = curTotalLen / (duration / 1000);
     traveled = 0;
@@ -710,27 +942,25 @@ function playAnim() {
 
   function tick(ts) {
     if (lastTs === null) lastTs = ts;
-    // タブ切り替え直後などの大きすぎるdtは無視して、飛び跳ねを防ぐ
     const dt = Math.min(48, ts - lastTs);
     lastTs = ts;
 
     if (ts < pauseUntil) { animRaf = requestAnimationFrame(tick); return; }
 
-    // 完了済みの画はキャッシュ画像を等倍コピーするだけ(再計算なし)。
-    // drawImageで転写する間だけ変換行列を単位行列に戻し、二重スケールを防ぐ。
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cvRef.width, cvRef.height);
     ctx.drawImage(doneCanvas, 0, 0);
     ctx.restore();
 
-    const animPts = sliceByLength(curPts, curCum, traveled);
-    drawSmoothLine(ctx, animPts, hexToRgba(strokeColor(sIdx), 0.95), strokeWidth(sIdx), true);
+    const slicedPts = sliceByLength(curPts, curCum, traveled);
+    drawStrokeClipped(ctx, slicedPts, curPath2D, traceLineWidth(sIdx), curMaskW, hexToRgba(strokeColor(sIdx), 0.95));
 
     traveled += curSpeed * (dt / 1000);
     if (traveled >= curTotalLen) {
-      // この画が完成したので、キャッシュcanvasに1回だけ焼き込む
-      drawSmoothLine(doneCtx, curPts, hexToRgba(strokeColor(sIdx), 0.8), strokeWidth(sIdx), false);
+      // この画が完成したので、本物の輪郭パスをそのまま(クリップ不要で全部)キャッシュへ焼き込む
+      bakeStrokeClipped(doneCtx, curPts, curPath2D, curMaskW, hexToRgba(strokeColor(sIdx), 0.8));
+
       sIdx++;
       if (sIdx >= total) {
         ctx.save();
