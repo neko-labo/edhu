@@ -46,6 +46,12 @@
     letter-spacing:.5px;
   }
 
+  .doors{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+
   .door{
     display:flex;
     align-items:center;
@@ -103,17 +109,32 @@
     <h1>ねこラボ</h1>
     <p class="lead">すきなお部屋をえらんでね</p>
 
-    <a class="door" href="./learning-apps/">
-      <svg class="door-icon" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="1.6">
-        <path d="M4 4h7v16H4z"/>
-        <path d="M13 4h7v16h-7z"/>
-        <path d="M11 4v16" opacity="0"/>
-      </svg>
-      <div class="door-text">
-        <h2>きょういく</h2>
-        <p>まなびのツールブック</p>
-      </div>
-    </a>
+    <div class="doors">
+      <a class="door" href="./learning-apps/">
+        <svg class="door-icon" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="1.6">
+          <path d="M4 4h7v16H4z"/>
+          <path d="M13 4h7v16h-7z"/>
+          <path d="M11 4v16" opacity="0"/>
+        </svg>
+        <div class="door-text">
+          <h2>きょういく</h2>
+          <p>まなびのツールブック</p>
+        </div>
+      </a>
+
+      <a class="door" href="./learning-apps/note/gakushu-note.html">
+        <svg class="door-icon" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="1.6">
+          <path d="M6 3h9l4 4v14H6z"/>
+          <path d="M15 3v4h4"/>
+          <path d="M9 12h7" opacity="0.6"/>
+          <path d="M9 16h5" opacity="0.6"/>
+        </svg>
+        <div class="door-text">
+          <h2>がくしゅうノート</h2>
+          <p>ワークシートをつくって きょうゆう</p>
+        </div>
+      </a>
+    </div>
 
     <footer>neko-labo</footer>
   </div>
