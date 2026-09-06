@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>📝 学習ノート</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --pink:#ff6b9d; --pink-l:#ffe6f0;
+  --blue:#5ba8ff; --blue-l:#deeeff;
+  --yellow:#ffce47; --green:#47cc8a; --purple:#9b6bff;
+  --gray:#999; --text:#333;
+}
+*{box-sizing:border-box}
+html,body,#root{height:100%;margin:0;padding:0;overflow:hidden}
+body{
+  font-family:'M PLUS Rounded 1c','Hiragino Kaku Gothic ProN',sans-serif;
+  background:linear-gradient(135deg,#fff9e6 0%,#ffeef8 50%,#e0f7ff 100%);
+  color:var(--text); user-select:none;
+}
+header{
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  padding:6px 10px; background:rgba(255,255,255,0.85);
+  border-bottom:1px solid rgba(0,0,0,0.08); flex-shrink:0;
+}
+header h1{ font-size:1rem; color:var(--pink); margin:0 8px 0 0; flex-shrink:0; }
+.status{ font-size:11px; color:#778; margin-left:auto; white-space:nowrap; }
+
+.layout{ display:flex; flex:1; overflow:hidden; min-height:0; }
+.toolbar{
+  width:70px; flex-shrink:0; background:rgba(255,255,255,0.55);
+  border-right:1px solid rgba(0,0,0,0.08); display:flex; flex-direction:column;
+  align-items:center; gap:5px; padding:8px 4px; overflow-y:auto;
+}
+.stage{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:8px; padding:10px; overflow:hidden; background:#fff;
+}
+.canvas-wrap{
+  position:relative; flex-shrink:0; border:3px solid var(--pink-l); border-radius:10px;
+  overflow:hidden; background:#fdfdfd; touch-action:none;
+  box-shadow:0 4px 14px rgba(0,0,0,0.10);
+}
+.canvas-wrap canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+#cv-main{ z-index:1; }
+#cv-ovl{ z-index:2; pointer-events:none; }
+.text-editor{
+  position:absolute; z-index:3; border:2px dashed var(--purple); background:rgba(255,255,255,0.92);
+  resize:none; font-family:inherit; padding:4px; box-sizing:border-box; outline:none;
+}
+.obj-panel{
+  display:flex; gap:6px; align-items:center; background:rgba(255,107,157,0.08);
+  border:1px solid rgba(255,107,157,0.3); border-radius:10px; padding:6px 10px; flex-wrap:wrap; justify-content:center;
+}
+.side{
+  width:150px; flex-shrink:0; border-left:1px solid rgba(0,0,0,0.08);
+  background:rgba(255,255,255,0.5); display:flex; flex-direction:column; overflow:hidden;
+}
+.side-hd{ font-size:10px; font-weight:800; color:#889; letter-spacing:1px; padding:6px 8px 2px; }
+.pages{ flex:1; overflow-y:auto; padding:6px; display:flex; flex-direction:column; gap:6px; }
+.page-thumb{
+  border:2px solid #ddd; border-radius:6px; overflow:hidden; cursor:pointer; position:relative; background:#f5f5f8;
+}
+.page-thumb.sel{ border-color:var(--pink); }
+.page-thumb img{ width:100%; display:block; }
+.page-thumb .num{
+  position:absolute; top:2px; left:2px; background:rgba(0,0,0,0.55); color:#fff;
+  font-size:9px; padding:1px 5px; border-radius:8px; font-weight:700;
+}
+@media (max-width: 720px) {
+  html,body{ overflow-y:auto !important; height:auto !important; min-height:100dvh; }
+  .layout{ flex-direction:column; overflow-y:visible !important; height:auto !important; }
+  .toolbar{ width:100%; flex-direction:row; flex-wrap:wrap; border-right:none; border-bottom:1px solid rgba(0,0,0,0.08); }
+  .side{ width:100%; border-left:none; border-top:1px solid rgba(0,0,0,0.08); }
+  .pages{ flex-direction:row; overflow-x:auto; overflow-y:hidden; }
+  .page-thumb{ width:80px; flex-shrink:0; }
+  .stage{ min-height:70vh; }
+}
+button{ font-family:inherit; cursor:pointer; }
+.tbtn{
+  width:52px; height:44px; border:none; border-radius:9px; background:#fff; color:#333;
+  font-size:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  box-shadow:0 2px 4px rgba(0,0,0,0.08);
+}
+.tbtn.active{ background:var(--pink); color:#fff; box-shadow:0 2px 8px rgba(255,107,157,0.4); }
+.abtn{
+  padding:5px 9px; border:none; border-radius:6px; background:#fff; color:#333; font-size:11px;
+  font-weight:700; box-shadow:0 2px 4px rgba(0,0,0,0.08); white-space:nowrap;
+}
+.abtn.hi{ background:var(--pink); color:#fff; }
+.abtn.danger{ background:#ffe0e6; color:#c0395a; }
+.abtn:disabled{ opacity:0.4; cursor:default; }
+.sep{ width:100%; height:1px; background:rgba(0,0,0,0.08); margin:3px 0; }
+.small-lbl{ font-size:9px; color:#889; text-align:center; }
+.swatches{ display:flex; flex-wrap:wrap; gap:3px; width:60px; justify-content:center; }
+.swatch{ width:15px; height:15px; border-radius:50%; border:2px solid #ddd; padding:0; }
+.swatch.sel{ border-color:var(--pink); box-shadow:0 0 5px rgba(255,107,157,0.6); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+/* ===================== 定数・ID採番 ===================== */
+const DEFAULT_PW = 700, DEFAULT_PH = 990; // 初期の用紙サイズ（論理解像度）
+const MARGIN = 160;                 // ページの外側に確保する「作業スペース」の幅(px, 論理座標)
+const HANDLE = 24;                  // リサイズハンドルの当たり判定サイズ(px, 論理座標)
+const PALETTE = ['#000000','#ff2222','#ff8800','#ffee00','#22cc22','#2266ff','#8822ff','#ff44cc'];
+
+let _pid=0,_mid=0,_tid=0;
+const npid=()=>++_pid, nmid=()=>++_mid, ntid=()=>++_tid;
+const mkPage = () => ({ id:npid(), background:null, materials:[], textboxes:[] });
+const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+
+/* ===================== テキスト折り返し ===================== */
+function wrapLines(ctx, text, maxWidth) {
+  const paras = String(text).split('\n');
+  const lines = [];
+  paras.forEach(p => {
+    if (p === '') { lines.push(''); return; }
+    let cur = '';
+    for (const ch of p) {
+      const test = cur + ch;
+      if (ctx.measureText(test).width > maxWidth && cur !== '') {
+        lines.push(cur); cur = ch;
+      } else { cur = test; }
+    }
+    lines.push(cur);
+  });
+  return lines;
+}
+
+function App() {
+  const [pages, setPages] = useState(() => [mkPage()]);
+  const [pageIdx, setPageIdx] = useState(0);
+  const [tool, setTool] = useState('select');      // select | pen | eraser | text
+  const [color, setColor] = useState('#000000');
+  const [penSize, setPenSize] = useState(5);
+  const [fontSize, setFontSize] = useState(30);
+  const [status, setStatus] = useState('準備完了');
+  const [thumbs, setThumbs] = useState({});
+  const [selected, setSelected] = useState(null);   // { type:'material'|'text', obj }
+  const [editingId, setEditingId] = useState(null); // 編集中テキストボックスid
+  const [editingVal, setEditingVal] = useState('');
+
+  const cvs = useRef(null), ovl = useRef(null), stageWrap = useRef(null), stageBox = useRef(null);
+  const [paperW, setPaperW] = useState(DEFAULT_PW);
+  const [paperH, setPaperH] = useState(DEFAULT_PH);
+  const PWR = useRef(paperW); useEffect(()=>{ PWR.current = paperW; }, [paperW]);
+  const PHR = useRef(paperH); useEffect(()=>{ PHR.current = paperH; }, [paperH]);
+  const [dispSize, setDispSize] = useState({ w: 350, h: 350*(DEFAULT_PH/DEFAULT_PW) });
+  const penLayers = useRef({});      // pageId -> offscreen canvas（ペン線）
+  const undoStacks = useRef({});     // pageId -> ImageData[]
+  const bgImgs = useRef({});         // pageId -> Image
+  const matImgs = useRef({});        // materialId -> Image
+
+  const PG = useRef(pages); useEffect(()=>{ PG.current = pages; }, [pages]);
+  const PI = useRef(pageIdx); useEffect(()=>{ PI.current = pageIdx; }, [pageIdx]);
+  const TL = useRef(tool); useEffect(()=>{ TL.current = tool; }, [tool]);
+  const CR = useRef(color); useEffect(()=>{ CR.current = color; }, [color]);
+  const SZ = useRef(penSize); useEffect(()=>{ SZ.current = penSize; }, [penSize]);
+  const FS = useRef(fontSize); useEffect(()=>{ FS.current = fontSize; }, [fontSize]);
+  const SEL = useRef(selected); useEffect(()=>{ SEL.current = selected; }, [selected]);
+
+  const drg = useRef(null);   // { mode:'move'|'resize', startPos, orig }
+  const strokePt = useRef(null);
+
+  /* ---------- ページ内リソース取得ヘルパ ---------- */
+  const glc = useCallback((pageId) => {
+    if (!penLayers.current[pageId]) {
+      const c = document.createElement('canvas'); c.width = PWR.current; c.height = PHR.current;
+      penLayers.current[pageId] = c;
+    }
+    return penLayers.current[pageId];
+  }, []);
+
+  const getBgImg = (page) => {
+    if (!page.background) return null;
+    let img = bgImgs.current[page.id];
+    if (!img || img.src !== page.background) {
+      img = new Image(); img.src = page.background; bgImgs.current[page.id] = img;
+      img.onload = () => rerender();
+    }
+    return img.complete ? img : null;
+  };
+  const getMatImg = (mat) => {
+    let img = matImgs.current[mat.id];
+    if (!img) {
+      img = new Image(); img.src = mat.dataURL; matImgs.current[mat.id] = img;
+      img.onload = () => rerender();
+    }
+    return img.complete ? img : null;
+  };
+
+  /* ---------- 合成描画 ----------
+     pageOnly=false: 編集画面用。ページの周りに「作業スペース」を持つ広いステージを描画（素材を置いておける）
+     pageOnly=true : サムネイル・画像/PDF書き出し用。ページ内だけを実寸で描画（作業スペースは含まない） */
+  const comp = useCallback((page, ctx, pageOnly) => {
+    const PW = PWR.current, PH = PHR.current;
+    const ox = pageOnly ? 0 : MARGIN, oy = pageOnly ? 0 : MARGIN;
+    const cw = pageOnly ? PW : PW + MARGIN*2, ch = pageOnly ? PH : PH + MARGIN*2;
+    ctx.clearRect(0,0,cw,ch);
+    if (!pageOnly) {
+      ctx.fillStyle = '#e9edf5'; ctx.fillRect(0,0,cw,ch);
+      ctx.save();
+      ctx.font = '13px sans-serif'; ctx.fillStyle = '#9aa4bb'; ctx.textAlign = 'center';
+      ctx.fillText('🗂 このまわりは作業スペース（保存・印刷には含まれません）', cw/2, MARGIN/2);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.shadowColor = pageOnly ? 'transparent' : 'rgba(0,0,0,0.18)';
+    ctx.shadowBlur = pageOnly ? 0 : 16;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(ox, oy, PW, PH);
+    ctx.restore();
+    if (!pageOnly) { ctx.strokeStyle = '#c7cee0'; ctx.lineWidth = 1.5; ctx.strokeRect(ox+0.5, oy+0.5, PW-1, PH-1); }
+
+    const bg = getBgImg(page);
+    if (bg) ctx.drawImage(bg, ox, oy, PW, PH);
+
+    page.materials.forEach(m => {
+      const img = getMatImg(m); if (!img) return;
+      ctx.save();
+      ctx.translate(ox+m.x, oy+m.y);
+      ctx.rotate((m.rotation||0) * Math.PI/180);
+      ctx.drawImage(img, -m.w/2, -m.h/2, m.w, m.h);
+      ctx.restore();
+      if (m.lockMove || m.lockSize) drawLockBadge(ctx, ox+m.x - m.w/2, oy+m.y - m.h/2, m.lockMove, m.lockSize);
+    });
+
+    page.textboxes.forEach(t => {
+      ctx.save();
+      ctx.font = `700 ${t.fontSize}px "M PLUS Rounded 1c",sans-serif`;
+      ctx.fillStyle = '#222';
+      ctx.textBaseline = 'top';
+      const lines = wrapLines(ctx, t.text || '', t.w - 8);
+      const lh = t.fontSize * 1.25;
+      lines.forEach((ln, i) => {
+        if (i*lh > t.h - lh*0.5) return;
+        ctx.fillText(ln, ox+t.x + 4, oy+t.y + 4 + i*lh);
+      });
+      ctx.restore();
+      if (t.lockMove || t.lockSize) drawLockBadge(ctx, ox+t.x, oy+t.y, t.lockMove, t.lockSize);
+    });
+
+    const pl = penLayers.current[page.id];
+    if (pl) ctx.drawImage(pl, ox, oy);
+  }, []);
+
+  function drawLockBadge(ctx, x, y, lockMove, lockSize) {
+    ctx.save();
+    ctx.font = '16px sans-serif';
+    ctx.textBaseline = 'top';
+    let icon = (lockMove && lockSize) ? '🔒' : (lockMove ? '📌' : '📐');
+    ctx.fillText(icon, x + 2, y + 2);
+    ctx.restore();
+  }
+
+  const rerender = useCallback(() => {
+    if (!cvs.current) return;
+    const page = PG.current[PI.current]; if (!page) return;
+    comp(page, cvs.current.getContext('2d'), false);
+  }, [comp]);
+
+  const mkThumb = useCallback((page) => {
+    const tc = document.createElement('canvas'); tc.width = PWR.current; tc.height = PHR.current;
+    comp(page, tc.getContext('2d'), true);
+    setThumbs(p => ({ ...p, [page.id]: tc.toDataURL('image/png', 0.5) }));
+  }, [comp]);
+
+  useEffect(() => { rerender(); }, [pages, pageIdx, rerender]);
+  useEffect(() => { const p = pages[pageIdx]; if (p) mkThumb(p); }, [pages, pageIdx, mkThumb]);
+
+  /* ---------- オーバーレイ（選択枠・ハンドル） ---------- */
+  const drawOverlay = useCallback(() => {
+    const oc = ovl.current; if (!oc) return;
+    const PW = PWR.current, PH = PHR.current;
+    const ox = MARGIN, oy = MARGIN;
+    const ctx = oc.getContext('2d');
+    ctx.clearRect(0,0,PW+MARGIN*2,PH+MARGIN*2);
+    const sel = SEL.current; if (!sel) return;
+    const o = sel.obj;
+    let x1,y1,w,h;
+    if (sel.type === 'material') { x1 = ox+o.x - o.w/2; y1 = oy+o.y - o.h/2; w = o.w; h = o.h; }
+    else { x1 = ox+o.x; y1 = oy+o.y; w = o.w; h = o.h; }
+    ctx.save();
+    // 半透明の塗り：選択中であることを一目で分かるように
+    ctx.fillStyle = 'rgba(255,110,199,0.14)';
+    ctx.fillRect(x1, y1, w, h);
+    // 白いハロー＋濃色の点線で、どんな背景の上でも見えるようにする
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 5;
+    ctx.strokeRect(x1, y1, w, h);
+    ctx.strokeStyle = '#ff2e88'; ctx.lineWidth = 2.5; ctx.setLineDash([8,5]);
+    ctx.strokeRect(x1, y1, w, h);
+    ctx.setLineDash([]);
+    if (!o.lockSize) {
+      const hx = x1+w, hy = y1+h;
+      ctx.beginPath(); ctx.arc(hx, hy, 13, 0, Math.PI*2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+      ctx.beginPath(); ctx.arc(hx, hy, 9, 0, Math.PI*2);
+      ctx.fillStyle = '#ff2e88'; ctx.fill();
+    }
+    ctx.restore();
+  }, []);
+  useEffect(() => { drawOverlay(); }, [selected, drawOverlay]);
+
+  /* ---------- 座標変換 ----------
+     戻り値はページ左上を(0,0)とする座標。作業スペース分だけ負の値・PW/PHを超える値も許容する
+     （素材をワークシートの外に置けるようにするため）。 */
+  const gpos = (e) => {
+    const r = cvs.current.getBoundingClientRect();
+    const PW = PWR.current, PH = PHR.current;
+    const stageX = (e.clientX - r.left) * (PW+MARGIN*2) / r.width;
+    const stageY = (e.clientY - r.top) * (PH+MARGIN*2) / r.height;
+    return {
+      x: clamp(stageX - MARGIN, -MARGIN, PW+MARGIN-1),
+      y: clamp(stageY - MARGIN, -MARGIN, PH+MARGIN-1),
+    };
+  };
+
+  /* ---------- ペン描画 ---------- */
+  const pushUndo = (pageId) => {
+    const snap = glc(pageId).getContext('2d').getImageData(0,0,PWR.current,PHR.current);
+    if (!undoStacks.current[pageId]) undoStacks.current[pageId] = [];
+    undoStacks.current[pageId].push(snap);
+    if (undoStacks.current[pageId].length > 25) undoStacks.current[pageId].shift();
+  };
+  const strokeTo = (a, b) => {
+    const page = PG.current[PI.current]; if (!page) return;
+    const lc = glc(page.id), ctx = lc.getContext('2d');
+    ctx.globalCompositeOperation = TL.current === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = CR.current; ctx.lineWidth = TL.current === 'eraser' ? SZ.current*3 : SZ.current;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(a.x, a.y);
+    ctx.lineTo(a.x===b.x && a.y===b.y ? b.x+0.01 : b.x, b.y);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+    rerender();
+  };
+  const doUndo = () => {
+    const page = PG.current[PI.current]; if (!page) return;
+    const stack = undoStacks.current[page.id];
+    if (!stack || !stack.length) return;
+    glc(page.id).getContext('2d').putImageData(stack.pop(), 0, 0);
+    rerender(); mkThumb(page);
+  };
+
+  /* ---------- 当たり判定 ---------- */
+  function hitHandle(pos, o, type) {
+    let x2,y2;
+    if (type==='material') { x2 = o.x+o.w/2; y2 = o.y+o.h/2; } else { x2 = o.x+o.w; y2 = o.y+o.h; }
+    return Math.abs(pos.x-x2) < HANDLE && Math.abs(pos.y-y2) < HANDLE;
+  }
+  function hitBody(pos, o, type) {
+    if (type==='material') return Math.abs(pos.x-o.x) < o.w/2 && Math.abs(pos.y-o.y) < o.h/2;
+    return pos.x>=o.x && pos.x<=o.x+o.w && pos.y>=o.y && pos.y<=o.y+o.h;
+  }
+  function findHit(page, pos) {
+    for (let i=page.textboxes.length-1;i>=0;i--) {
+      if (hitBody(pos, page.textboxes[i], 'text')) return { type:'text', obj: page.textboxes[i] };
+    }
+    for (let i=page.materials.length-1;i>=0;i--) {
+      if (hitBody(pos, page.materials[i], 'material')) return { type:'material', obj: page.materials[i] };
+    }
+    return null;
+  }
+
+  /* ---------- ポインタイベント ---------- */
+  const onDown = useCallback((e) => {
+    e.preventDefault();
+    const pos = gpos(e);
+    const t = TL.current;
+    const page = PG.current[PI.current]; if (!page) return;
+
+    if (t === 'select') {
+      const sel = SEL.current;
+      if (sel && !sel.obj.lockSize && hitHandle(pos, sel.obj, sel.type)) {
+        drg.current = { mode:'resize', start: pos, orig: { ...sel.obj } };
+        return;
+      }
+      const hit = findHit(page, pos);
+      if (hit) {
+        setSelected(hit);
+        if (!hit.obj.lockMove) drg.current = { mode:'move', start: pos, orig: { ...hit.obj } };
+        else drg.current = null;
+      } else {
+        setSelected(null);
+        drg.current = null;
+      }
+      return;
+    }
+
+    if (t === 'text') {
+      // テキストはページの中だけに配置（作業スペースには置かない）
+      if (pos.x < 0 || pos.x > PWR.current || pos.y < 0 || pos.y > PHR.current) return;
+      const nt = { id: ntid(), x: pos.x-90, y: pos.y-30, w:180, h:60, text:'', fontSize: FS.current, lockMove:false, lockSize:false };
+      setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, textboxes:[...pg.textboxes, nt] }));
+      setSelected({ type:'text', obj: nt });
+      setEditingId(nt.id); setEditingVal('');
+      return;
+    }
+
+    // pen / eraser
+    e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+    pushUndo(page.id);
+    strokePt.current = pos;
+    strokeTo(pos, pos);
+  }, []);
+
+  /* ダブルクリック／ダブルタップで直接テキスト編集に入る */
+  const onDblClick = useCallback((e) => {
+    if (TL.current !== 'select') return;
+    const pos = gpos(e);
+    const page = PG.current[PI.current]; if (!page) return;
+    for (let i=page.textboxes.length-1;i>=0;i--) {
+      const tb = page.textboxes[i];
+      if (hitBody(pos, tb, 'text')) {
+        if (tb.lockMove || tb.lockSize) return; // ロック中は編集不可
+        setSelected({ type:'text', obj: tb });
+        setEditingId(tb.id); setEditingVal(tb.text || '');
+        return;
+      }
+    }
+  }, []);
+
+  const onMove = useCallback((e) => {
+    e.preventDefault();
+    const pos = gpos(e);
+    const t = TL.current;
+    const PW = PWR.current, PH = PHR.current;
+
+    if (t === 'select' && drg.current) {
+      const { mode, start, orig } = drg.current;
+      const dx = pos.x - start.x, dy = pos.y - start.y;
+      let next;
+      if (mode === 'move') {
+        next = { ...orig, x: orig.x + dx, y: orig.y + dy };
+        if (SEL.current.type === 'text') {
+          // テキストはページの外に出さない（素材だけ作業スペースに出せる）
+          next.x = clamp(next.x, 0, Math.max(0, PW - next.w));
+          next.y = clamp(next.y, 0, Math.max(0, PH - next.h));
+        }
+      } else if (SEL.current.type === 'material') {
+        // 中心(x,y)基準なので、左上の角が動かないよう中心も一緒にずらす
+        const maxSide = Math.max(PW,PH) * 3;
+        const nw = clamp(orig.w + dx, 24, maxSide), nh = clamp(orig.h + dy, 24, maxSide);
+        next = { ...orig, w: nw, h: nh, x: orig.x + (nw-orig.w)/2, y: orig.y + (nh-orig.h)/2 };
+      } else {
+        next = { ...orig, w: clamp(orig.w + dx, 40, PW), h: clamp(orig.h + dy, 24, PH) };
+      }
+      setSelected(s => ({ ...s, obj: next }));
+      return;
+    }
+
+    if (t === 'pen' || t === 'eraser') {
+      if (!strokePt.current) return;
+      strokeTo(strokePt.current, pos);
+      strokePt.current = pos;
+    }
+  }, []);
+
+  const onUp = useCallback(() => {
+    const t = TL.current;
+    if (t === 'select' && drg.current) {
+      const sel = SEL.current;
+      const page = PG.current[PI.current];
+      if (sel && page) {
+        const arrKey = sel.type === 'material' ? 'materials' : 'textboxes';
+        setPages(p => p.map((pg,i) => i!==PI.current ? pg : {
+          ...pg, [arrKey]: pg[arrKey].map(o => o.id === sel.obj.id ? sel.obj : o)
+        }));
+        setTimeout(() => mkThumb(PG.current[PI.current]), 0);
+      }
+      drg.current = null;
+      return;
+    }
+    if (t === 'pen' || t === 'eraser') {
+      strokePt.current = null;
+      const page = PG.current[PI.current]; if (page) mkThumb(page);
+    }
+  }, [mkThumb]);
+
+  /* ---------- テキスト編集 ---------- */
+  const commitEditingText = () => {
+    if (editingId == null) return;
+    const page = PG.current[PI.current];
+    const val = editingVal;
+    setPages(p => p.map((pg,i) => i!==PI.current ? pg : {
+      ...pg,
+      textboxes: val.trim() === ''
+        ? pg.textboxes.filter(tb => tb.id !== editingId)
+        : pg.textboxes.map(tb => tb.id === editingId ? { ...tb, text: val } : tb)
+    }));
+    if (val.trim() === '') setSelected(null);
+    else setSelected(s => s && s.obj.id === editingId ? { ...s, obj: { ...s.obj, text: val } } : s);
+    setEditingId(null); setEditingVal('');
+    setTimeout(() => { if (page) mkThumb(PG.current[PI.current]); }, 0);
+  };
+
+  /* ---------- 選択オブジェクト操作 ---------- */
+  const patchSelected = (patch) => {
+    const sel = SEL.current; if (!sel) return;
+    const arrKey = sel.type === 'material' ? 'materials' : 'textboxes';
+    const next = { ...sel.obj, ...patch };
+    setSelected({ ...sel, obj: next });
+    setPages(p => p.map((pg,i) => i!==PI.current ? pg : {
+      ...pg, [arrKey]: pg[arrKey].map(o => o.id === next.id ? next : o)
+    }));
+    setTimeout(() => mkThumb(PG.current[PI.current]), 0);
+  };
+  const deleteSelected = () => {
+    const sel = SEL.current; if (!sel) return;
+    const arrKey = sel.type === 'material' ? 'materials' : 'textboxes';
+    setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, [arrKey]: pg[arrKey].filter(o => o.id !== sel.obj.id) }));
+    setSelected(null);
+    setTimeout(() => mkThumb(PG.current[PI.current]), 0);
+  };
+  const duplicateSelected = () => {
+    const sel = SEL.current; if (!sel) return;
+    const isM = sel.type === 'material';
+    const nid = isM ? nmid() : ntid();
+    const copy = { ...sel.obj, id: nid, x: sel.obj.x + 20, y: sel.obj.y + 20 };
+    const arrKey = isM ? 'materials' : 'textboxes';
+    setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, [arrKey]: [...pg[arrKey], copy] }));
+    setSelected({ type: sel.type, obj: copy });
+    setTimeout(() => mkThumb(PG.current[PI.current]), 0);
+  };
+
+  /* ---------- 素材・背景の取り込み ---------- */
+  const pickImage = (onLoaded) => {
+    const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*';
+    inp.onchange = e => {
+      const file = e.target.files[0]; if (!file) return;
+      const rd = new FileReader();
+      rd.onload = ev => onLoaded(ev.target.result);
+      rd.readAsDataURL(file);
+    };
+    inp.click();
+  };
+  const addMaterial = () => {
+    pickImage(dataURL => {
+      const img = new Image();
+      img.onload = () => {
+        const maxSide = 220;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+        const id = nmid();
+        matImgs.current[id] = img;
+        const m = { id, dataURL, x: paperW/2, y: paperH/2, w, h, rotation:0, lockMove:false, lockSize:false };
+        setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, materials:[...pg.materials, m] }));
+        setSelected({ type:'material', obj:m });
+        setStatus('✓ 素材を追加しました');
+        setTimeout(() => mkThumb(PG.current[PI.current]), 0);
+      };
+      img.src = dataURL;
+    });
+  };
+  const setBackground = () => {
+    pickImage(dataURL => {
+      const page = PG.current[PI.current];
+      setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, background: dataURL }));
+      delete bgImgs.current[page.id];
+      setStatus('✓ 背景を設定しました');
+      setTimeout(() => mkThumb(PG.current[PI.current]), 0);
+    });
+  };
+  const clearBackground = () => {
+    const page = PG.current[PI.current];
+    setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, background:null }));
+    delete bgImgs.current[page.id];
+    setTimeout(() => mkThumb(PG.current[PI.current]), 0);
+  };
+
+  /* ---------- ページ操作 ---------- */
+  const addPage = () => {
+    const np = mkPage();
+    setPages(p => { const n=[...p]; n.splice(pageIdx+1,0,np); return n; });
+    setPageIdx(pageIdx+1); setSelected(null);
+  };
+  const copyPage = () => {
+    const src = pages[pageIdx];
+    const np = {
+      id: npid(), background: src.background,
+      materials: src.materials.map(m => ({ ...m, id: nmid() })),
+      textboxes: src.textboxes.map(t => ({ ...t, id: ntid() })),
+    };
+    src.materials.forEach((m,i) => { matImgs.current[np.materials[i].id] = matImgs.current[m.id]; });
+    const srcLayer = penLayers.current[src.id];
+    if (srcLayer) { const dc=document.createElement('canvas'); dc.width=paperW; dc.height=paperH; dc.getContext('2d').drawImage(srcLayer,0,0); penLayers.current[np.id]=dc; }
+    setPages(p => { const n=[...p]; n.splice(pageIdx+1,0,np); return n; });
+    setPageIdx(pageIdx+1); setSelected(null);
+  };
+  const delPage = () => {
+    if (pages.length<=1) return;
+    setPages(p => p.filter((_,i)=>i!==pageIdx));
+    setPageIdx(Math.max(0,pageIdx-1)); setSelected(null);
+  };
+  const movePage = (dir) => {
+    const ni = pageIdx+dir; if (ni<0||ni>=pages.length) return;
+    setPages(p => { const n=[...p]; [n[pageIdx],n[ni]]=[n[ni],n[pageIdx]]; return n; });
+    setPageIdx(ni);
+  };
+
+  /* ---------- 用紙サイズの変更（全ページの内容を比率に合わせて再配置） ---------- */
+  const [pwInput, setPwInput] = useState(String(DEFAULT_PW));
+  const [phInput, setPhInput] = useState(String(DEFAULT_PH));
+  useEffect(() => { setPwInput(String(paperW)); setPhInput(String(paperH)); }, [paperW, paperH]);
+
+  const applyPaperSize = (rawW, rawH) => {
+    const newW = clamp(Math.round(Number(rawW)||paperW), 100, 4000);
+    const newH = clamp(Math.round(Number(rawH)||paperH), 100, 4000);
+    if (newW === paperW && newH === paperH) return;
+    const scaleX = newW / paperW, scaleY = newH / paperH;
+    const newPages = pages.map(pg => {
+      const np = {
+        ...pg,
+        materials: pg.materials.map(m => ({ ...m, x: m.x*scaleX, y: m.y*scaleY, w: m.w*scaleX, h: m.h*scaleY })),
+        textboxes: pg.textboxes.map(t => ({ ...t, x: t.x*scaleX, y: t.y*scaleY, w: t.w*scaleX, h: t.h*scaleY, fontSize: Math.max(8, Math.round(t.fontSize*scaleY)) })),
+      };
+      const old = penLayers.current[pg.id];
+      if (old) {
+        const nc = document.createElement('canvas'); nc.width = newW; nc.height = newH;
+        nc.getContext('2d').drawImage(old, 0, 0, old.width, old.height, 0, 0, newW, newH);
+        penLayers.current[pg.id] = nc;
+      }
+      return np;
+    });
+    setPaperW(newW); setPaperH(newH);
+    setPages(newPages);
+    setSelected(null);
+    setStatus('✓ 用紙サイズを変更しました');
+    setTimeout(() => { const p = newPages[PI.current]; if (p) mkThumb(p); }, 0);
+  };
+  const resizePaper = () => applyPaperSize(pwInput, phInput);
+  const swapPaper = () => applyPaperSize(paperH, paperW);
+
+  /* ---------- 保存・読込・提出 ---------- */
+  const buildExportData = () => ({
+    version: 2,
+    paperW, paperH,
+    pages: pages.map(pg => ({
+      id: pg.id, background: pg.background, materials: pg.materials, textboxes: pg.textboxes,
+      strokes: penLayers.current[pg.id] ? penLayers.current[pg.id].toDataURL('image/png') : null,
+    })),
+  });
+
+  const downloadJSON = (data, filename) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type:'application/json' }));
+    a.download = filename; a.click();
+  };
+
+  const save = () => { downloadJSON(buildExportData(), 'worksheet.json'); setStatus('✓ 保存しました'); };
+
+  const loadFromData = (d) => {
+    if (!d || !d.pages) throw new Error('invalid');
+    const lw = d.paperW || DEFAULT_PW, lh = d.paperH || DEFAULT_PH;
+    _pid = Math.max(_pid, ...d.pages.map(p=>p.id));
+    _mid = Math.max(_mid, 0, ...d.pages.flatMap(p=>p.materials.map(m=>m.id)));
+    _tid = Math.max(_tid, 0, ...d.pages.flatMap(p=>p.textboxes.map(t=>t.id)));
+    const newPages = d.pages.map(p => ({
+      id:p.id, background:p.background,
+      // 旧バージョン(locked単一フラグ)からの移行
+      materials: p.materials.map(m => m.lockMove!==undefined ? m : { ...m, lockMove: !!m.locked, lockSize: !!m.locked }),
+      textboxes: p.textboxes.map(t => t.lockMove!==undefined ? t : { ...t, lockMove: !!t.locked, lockSize: !!t.locked }),
+    }));
+    return Promise.all(d.pages.map(p => new Promise(res => {
+      p.materials.forEach(m => { if (!matImgs.current[m.id]) { const im=new Image(); im.src=m.dataURL; matImgs.current[m.id]=im; } });
+      if (!p.strokes) { res(); return; }
+      const img = new Image();
+      img.onload = () => { const c=document.createElement('canvas'); c.width=lw; c.height=lh; c.getContext('2d').drawImage(img,0,0); penLayers.current[p.id]=c; res(); };
+      img.onerror = res; img.src = p.strokes;
+    }))).then(() => { setPaperW(lw); setPaperH(lh); setPages(newPages); setPageIdx(0); setSelected(null); });
+  };
+
+  const load = () => {
+    const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+    inp.onchange = e => {
+      const file = e.target.files[0]; if (!file) return;
+      const rd = new FileReader();
+      rd.onload = ev => {
+        try { loadFromData(JSON.parse(ev.target.result)).then(()=>setStatus('✓ 読み込みました')); }
+        catch { setStatus('✗ 読み込みエラー'); }
+      };
+      rd.readAsText(file);
+    };
+    inp.click();
+  };
+
+  const copyClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(buildExportData()));
+      setStatus('✓ クリップボードにコピーしました');
+    } catch { setStatus('✗ コピー失敗（画像が大きい可能性）ファイル保存を使ってね'); }
+  };
+  const pasteClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      await loadFromData(JSON.parse(text));
+      setStatus('✓ 貼り付けました');
+    } catch { setStatus('✗ 貼り付け失敗'); }
+  };
+
+  /* ---------- 画像・PDF書き出し ---------- */
+  const downloadImage = () => {
+    const page = pages[pageIdx];
+    const tc = document.createElement('canvas'); tc.width = paperW; tc.height = paperH;
+    comp(page, tc.getContext('2d'), true);
+    const a = document.createElement('a');
+    a.href = tc.toDataURL('image/png'); a.download = `worksheet_p${pageIdx+1}.png`; a.click();
+    setStatus('✓ 画像を書き出しました（このページのみ）');
+  };
+  const downloadPDF = () => {
+    if (!window.jspdf) { setStatus('PDF機能を読み込み中です。少し待ってからもう一度押してね'); return; }
+    const { jsPDF } = window.jspdf;
+    const orientation = paperW >= paperH ? 'landscape' : 'portrait';
+    const pdf = new jsPDF({ orientation, unit:'px', format:[paperW, paperH] });
+    pages.forEach((pg, i) => {
+      const tc = document.createElement('canvas'); tc.width = paperW; tc.height = paperH;
+      comp(pg, tc.getContext('2d'), true);
+      if (i > 0) pdf.addPage([paperW, paperH], orientation);
+      pdf.addImage(tc.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, paperW, paperH);
+    });
+    pdf.save('worksheet.pdf');
+    setStatus('✓ PDFを書き出しました（全ページ）');
+  };
+
+  /* ---------- 共有リンク（このHTML自体のURL＋データをハッシュに埋め込む） ----------
+     ※ このファイルをどこかのURL（学校のサーバー、GitHub Pages、Googleドライブ公開リンクなど）に
+        置いた状態で使う想定。ローカルのファイルをそのまま開いているだけだと、
+        別の端末では同じ場所を開けないためリンクが機能しない点に注意。 */
+  function bytesToBase64(bytes) {
+    let binary = ''; const chunk = 0x8000;
+    for (let i=0;i<bytes.length;i+=chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+    return btoa(binary);
+  }
+  function base64ToBytes(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+  async function compressToParam(obj) {
+    const str = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(str);
+    if (window.CompressionStream) {
+      const cs = new CompressionStream('gzip');
+      const writer = cs.writable.getWriter(); writer.write(bytes); writer.close();
+      const buf = await new Response(cs.readable).arrayBuffer();
+      return 'gz.' + bytesToBase64(new Uint8Array(buf));
+    }
+    return 'raw.' + bytesToBase64(bytes);
+  }
+  async function decompressFromParam(param) {
+    const dot = param.indexOf('.');
+    const tag = param.slice(0, dot), data = param.slice(dot+1);
+    const bytes = base64ToBytes(data);
+    if (tag === 'gz' && window.DecompressionStream) {
+      const ds = new DecompressionStream('gzip');
+      const writer = ds.writable.getWriter(); writer.write(bytes); writer.close();
+      const buf = await new Response(ds.readable).arrayBuffer();
+      return JSON.parse(new TextDecoder().decode(buf));
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  const copyShareLink = async () => {
+    try {
+      setStatus('リンクを作成中…');
+      const param = await compressToParam(buildExportData());
+      const base = location.origin + location.pathname;
+      const link = base + '#ws=' + param;
+      await navigator.clipboard.writeText(link);
+      if (link.length > 1500000) {
+        setStatus('⚠ リンクを作成しましたが、とても長いです（画像が多いかも）。コピーはできています');
+      } else {
+        setStatus('✓ 共有リンクをコピーしました');
+      }
+    } catch (e) {
+      setStatus('✗ リンク作成に失敗しました。ファイル保存を使ってね');
+    }
+  };
+
+  // 起動時：URLに #ws=... があれば自動的に読み込む
+  useEffect(() => {
+    const h = location.hash;
+    if (h && h.startsWith('#ws=')) {
+      setStatus('リンクからワークシートを読み込み中…');
+      decompressFromParam(decodeURIComponent(h.slice(4)))
+        .then(d => loadFromData(d))
+        .then(() => setStatus('✓ リンクからワークシートを開きました'))
+        .catch(() => setStatus('✗ リンクの読み込みに失敗しました'));
+    }
+  }, []);
+
+  /* ---------- 表示サイズ（コンテナに合わせて可変） ---------- */
+  useEffect(() => {
+    const calc = () => {
+      const box = stageBox.current; if (!box) return;
+      const stageW = paperW + MARGIN*2, stageH = paperH + MARGIN*2;
+      const availW = box.clientWidth - 16;
+      const availH = box.clientHeight - 70; // 下のobj-panel分の余白
+      let w = availW, h = w * (stageH/stageW);
+      if (h > availH) { h = availH; w = h * (stageW/stageH); }
+      setDispSize({ w: Math.max(200, w), h: Math.max(200*(stageH/stageW), h) });
+    };
+    calc();
+    window.addEventListener('resize', calc);
+    return () => window.removeEventListener('resize', calc);
+  }, [paperW, paperH]);
+
+  /* ---------- キーボード ---------- */
+  useEffect(() => {
+    const h = e => {
+      if ((e.ctrlKey||e.metaKey) && e.key==='z') { e.preventDefault(); doUndo(); }
+      if ((e.key==='Delete'||e.key==='Backspace') && SEL.current && editingId==null) { deleteSelected(); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [editingId]);
+
+  const page = pages[pageIdx] || pages[0];
+  const sel = selected;
+  const cursor = tool==='select' ? 'default' : tool==='text' ? 'text' : 'crosshair';
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh' }}>
+      <header>
+        <h1>📝 学習ノート</h1>
+        <span className="small-lbl" style={{whiteSpace:'nowrap'}}>用紙</span>
+        <input type="number" min={100} max={4000} value={pwInput} onChange={e=>setPwInput(e.target.value)} onBlur={resizePaper}
+          style={{width:56, fontSize:11, border:'1px solid #ddd', borderRadius:4, padding:'3px 4px'}} />
+        <span style={{fontSize:11,color:'#889'}}>×</span>
+        <input type="number" min={100} max={4000} value={phInput} onChange={e=>setPhInput(e.target.value)} onBlur={resizePaper}
+          style={{width:56, fontSize:11, border:'1px solid #ddd', borderRadius:4, padding:'3px 4px'}} />
+        <button className="abtn" onClick={resizePaper}>適用</button>
+        <button className="abtn" onClick={swapPaper} title="縦横入れ替え">🔄 縦横</button>
+        <div className="sep" style={{width:1,height:20,margin:'0 4px'}}></div>
+        <button className="abtn" onClick={save}>💾 保存</button>
+        <button className="abtn" onClick={load}>📂 開く</button>
+        <button className="abtn" onClick={copyClipboard}>📋 コピー</button>
+        <button className="abtn" onClick={pasteClipboard}>📥 貼付</button>
+        <button className="abtn" onClick={copyShareLink}>🔗 共有リンク</button>
+        <button className="abtn hi" onClick={downloadImage}>🖼 画像</button>
+        <button className="abtn hi" onClick={downloadPDF}>📕 PDF</button>
+        <span className="status">{status}</span>
+      </header>
+
+      <div className="layout">
+        <div className="toolbar">
+          <button className={"tbtn"+(tool==='select'?' active':'')} title="選択・移動" onClick={()=>setTool('select')}>🖐</button>
+          <button className={"tbtn"+(tool==='pen'?' active':'')} title="ペン" onClick={()=>setTool('pen')}>✏️</button>
+          <button className={"tbtn"+(tool==='eraser'?' active':'')} title="消しゴム" onClick={()=>setTool('eraser')}>🧽</button>
+          <button className={"tbtn"+(tool==='text'?' active':'')} title="テキスト追加" onClick={()=>setTool('text')}>🔤</button>
+          <div className="sep"></div>
+          <div className="swatches">
+            {PALETTE.map(c => (
+              <button key={c} className={"swatch"+(color===c?' sel':'')} style={{background:c}} onClick={()=>setColor(c)} />
+            ))}
+          </div>
+          <div className="small-lbl">ふとさ</div>
+          <input type="range" min={1} max={40} value={penSize} onChange={e=>setPenSize(+e.target.value)} style={{width:56}} />
+          <div className="sep"></div>
+          <button className="abtn" onClick={addMaterial}>🖼 素材</button>
+          <button className="abtn" onClick={setBackground}>🎨 背景</button>
+          {page.background && <button className="abtn" onClick={clearBackground}>背景消去</button>}
+          <div className="sep"></div>
+          <button className="abtn" onClick={doUndo}>↩ 戻す</button>
+        </div>
+
+        <div className="stage" ref={stageBox}>
+          <div className="canvas-wrap" ref={stageWrap} style={{ width: dispSize.w, height: dispSize.h }}>
+            <canvas id="cv-main" ref={cvs} width={paperW+MARGIN*2} height={paperH+MARGIN*2}
+              style={{ cursor }}
+              onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
+              onDoubleClick={onDblClick} />
+            <canvas id="cv-ovl" ref={ovl} width={paperW+MARGIN*2} height={paperH+MARGIN*2} />
+            {editingId!=null && (() => {
+              const tb = page.textboxes.find(t=>t.id===editingId); if (!tb) return null;
+              const stageW = paperW+MARGIN*2, stageH = paperH+MARGIN*2;
+              const scale = dispSize.w / stageW;
+              return (
+                <textarea autoFocus className="text-editor"
+                  style={{ left:((MARGIN+tb.x)/stageW*100)+'%', top:((MARGIN+tb.y)/stageH*100)+'%', width:(tb.w/stageW*100)+'%', height:(tb.h/stageH*100)+'%', fontSize:(tb.fontSize*scale)+'px' }}
+                  value={editingVal} onChange={e=>setEditingVal(e.target.value)}
+                  onBlur={commitEditingText} />
+              );
+            })()}
+          </div>
+
+          {sel && editingId==null && (() => {
+            const o = sel.obj;
+            const editable = !o.lockMove && !o.lockSize;
+            return (
+              <div className="obj-panel">
+                <button className="abtn" onClick={()=>patchSelected({lockMove:!o.lockMove})}>{o.lockMove?'📌 移動ロック解除':'📌 移動ロックする'}</button>
+                <button className="abtn" onClick={()=>patchSelected({lockSize:!o.lockSize})}>{o.lockSize?'📐 サイズロック解除':'📐 サイズロックする'}</button>
+                {sel.type==='material' && !o.lockMove && (<>
+                  <button className="abtn" onClick={()=>patchSelected({rotation:(o.rotation||0)-15})}>↺15°</button>
+                  <button className="abtn" onClick={()=>patchSelected({rotation:(o.rotation||0)+15})}>↻15°</button>
+                </>)}
+                {sel.type==='text' && editable && (
+                  <button className="abtn" onClick={()=>{ setEditingId(o.id); setEditingVal(o.text||''); }}>✏️ 文字を編集</button>
+                )}
+                {editable && <button className="abtn" onClick={duplicateSelected}>⊕ コピー</button>}
+                {editable && <button className="abtn danger" onClick={deleteSelected}>✕ 削除</button>}
+              </div>
+            );
+          })()}
+        </div>
+
+        <div className="side">
+          <div className="side-hd">PAGES ({pages.length})</div>
+          <div style={{display:'flex',gap:3,padding:'0 8px 6px'}}>
+            <button className="abtn" onClick={addPage}>＋</button>
+            <button className="abtn" onClick={copyPage}>⊕</button>
+            <button className="abtn" onClick={()=>movePage(-1)} disabled={pageIdx===0}>▲</button>
+            <button className="abtn" onClick={()=>movePage(1)} disabled={pageIdx===pages.length-1}>▼</button>
+            <button className="abtn danger" onClick={delPage} disabled={pages.length<=1}>✕</button>
+          </div>
+          <div className="pages">
+            {pages.map((pg,i) => (
+              <div key={pg.id} className={"page-thumb"+(i===pageIdx?' sel':'')} onClick={()=>{setPageIdx(i); setSelected(null);}}>
+                <span className="num">{i+1}</span>
+                {thumbs[pg.id] && <img src={thumbs[pg.id]} alt="" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
