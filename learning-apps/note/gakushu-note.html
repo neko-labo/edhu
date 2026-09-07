@@ -580,8 +580,29 @@ function App() {
     };
     inp.click();
   };
+  /* スマホ写真などをそのまま取り込むと数MBになりデータが重くなりすぎるため、
+     実際に使うサイズに合わせて縮小してから保存する。
+     素材は透明背景（切り抜き画像など）を想定してPNGのまま、
+     背景はページいっぱいに敷く写真を想定して少し大きめの上限＆JPEGで軽くする。 */
+  function resizeImage(dataURL, maxDim, format, quality) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width*scale)), h = Math.max(1, Math.round(img.height*scale));
+        if (scale >= 1) { resolve({ dataURL, w: img.width, h: img.height }); return; }
+        const c = document.createElement('canvas'); c.width=w; c.height=h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve({ dataURL: c.toDataURL(format, quality), w, h });
+      };
+      img.onerror = () => resolve({ dataURL, w: 200, h: 200 });
+      img.src = dataURL;
+    });
+  }
   const addMaterial = () => {
-    pickImage(dataURL => {
+    pickImage(async (rawDataURL) => {
+      setStatus('画像を読み込み中…');
+      const { dataURL, w: origW, h: origH } = await resizeImage(rawDataURL, 900, 'image/png');
       const img = new Image();
       img.onload = () => {
         const maxSide = 220;
@@ -599,7 +620,9 @@ function App() {
     });
   };
   const setBackground = () => {
-    pickImage(dataURL => {
+    pickImage(async (rawDataURL) => {
+      setStatus('画像を読み込み中…');
+      const { dataURL } = await resizeImage(rawDataURL, 1400, 'image/jpeg', 0.85);
       const page = PG.current[PI.current];
       setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, background: dataURL }));
       delete bgImgs.current[page.id];
@@ -796,10 +819,11 @@ function App() {
     const str = JSON.stringify(obj);
     const bytes = new TextEncoder().encode(str);
     if (window.CompressionStream) {
-      const cs = new CompressionStream('gzip');
-      const writer = cs.writable.getWriter();
-      await writer.write(bytes); await writer.close();
-      const buf = await new Response(cs.readable).arrayBuffer();
+      // Blob().stream().pipeThrough() を使うと、書き込みと読み取りが内部で並行して
+      // 処理されるため、データが大きくてもフリーズしない（writerを手動制御して
+      // write→closeを待ってから読み始めると、内部バッファが詰まって固まることがある）
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+      const buf = await new Response(stream).arrayBuffer();
       return 'gz.' + bytesToBase64Url(new Uint8Array(buf));
     }
     return 'raw.' + bytesToBase64Url(bytes);
@@ -809,29 +833,36 @@ function App() {
     const tag = param.slice(0, dot), data = param.slice(dot+1);
     const bytes = base64UrlToBytes(data);
     if (tag === 'gz' && window.DecompressionStream) {
-      const ds = new DecompressionStream('gzip');
-      const writer = ds.writable.getWriter();
-      await writer.write(bytes); await writer.close();
-      const buf = await new Response(ds.readable).arrayBuffer();
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      const buf = await new Response(stream).arrayBuffer();
       return JSON.parse(new TextDecoder().decode(buf));
     }
     return JSON.parse(new TextDecoder().decode(bytes));
   }
 
   const copyShareLink = async () => {
+    const withTimeout = (p, ms, label) => Promise.race([
+      p,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout:'+label)), ms)),
+    ]);
     try {
       setStatus('リンクを作成中…');
-      const param = await compressToParam(buildExportData());
+      const param = await withTimeout(compressToParam(buildExportData()), 15000, '圧縮');
       const base = location.origin + location.pathname;
       const link = base + '#ws=' + param;
-      await navigator.clipboard.writeText(link);
+      await withTimeout(navigator.clipboard.writeText(link), 8000, 'コピー');
       if (link.length > 1500000) {
         setStatus('⚠ リンクを作成しましたが、とても長いです（画像が多いかも）。コピーはできています');
       } else {
         setStatus('✓ 共有リンクをコピーしました（' + link.length + '文字）');
       }
     } catch (e) {
-      setStatus('✗ リンク作成に失敗しました。ファイル保存を使ってね');
+      console.error(e);
+      if (String(e && e.message).startsWith('timeout')) {
+        setStatus('✗ リンク作成がタイムアウトしました。画像を減らすかファイル保存を使ってね');
+      } else {
+        setStatus('✗ リンク作成に失敗しました。ファイル保存を使ってね');
+      }
     }
   };
 
