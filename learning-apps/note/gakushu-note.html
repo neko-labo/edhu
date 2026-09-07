@@ -43,17 +43,29 @@ header h1{ font-size:1rem; color:var(--pink); margin:0 8px 0 0; flex-shrink:0; }
   gap:8px; padding:10px; overflow:hidden; background:#fff;
 }
 .canvas-wrap{
-  position:relative; flex-shrink:0; border:3px solid var(--pink-l); border-radius:10px;
+  position:relative; flex-shrink:0;
+}
+.canvas-clip{
+  position:absolute; inset:0; border:3px solid var(--pink-l); border-radius:10px;
   overflow:hidden; background:#fdfdfd; touch-action:none;
   box-shadow:0 4px 14px rgba(0,0,0,0.10);
 }
-.canvas-wrap canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.canvas-clip canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
 #cv-main{ z-index:1; }
 #cv-ovl{ z-index:2; pointer-events:none; }
 .text-editor{
   position:absolute; z-index:3; border:2px dashed var(--purple); background:rgba(255,255,255,0.92);
   resize:none; font-family:inherit; padding:4px; box-sizing:border-box; outline:none;
 }
+.float-btn{
+  position:absolute; z-index:4; transform:translate(-50%,-50%);
+  width:32px; height:32px; border-radius:50%; border:2px solid #fff;
+  background:#ffffff; box-shadow:0 2px 8px rgba(0,0,0,0.3);
+  font-size:15px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; padding:0; line-height:1;
+}
+.float-btn.danger{ background:#ff4466; color:#fff; }
+.float-btn.rotate{ background:var(--purple); color:#fff; font-size:14px; }
 .obj-panel{
   display:flex; gap:6px; align-items:center; background:rgba(255,107,157,0.08);
   border:1px solid rgba(255,107,157,0.3); border-radius:10px; padding:6px 10px; flex-wrap:wrap; justify-content:center;
@@ -149,6 +161,9 @@ function App() {
   const [selected, setSelected] = useState(null);   // { type:'material'|'text', obj }
   const [editingId, setEditingId] = useState(null); // 編集中テキストボックスid
   const [editingVal, setEditingVal] = useState('');
+  const [editingFontSize, setEditingFontSize] = useState(30);
+  const [editingColor, setEditingColor] = useState('#000000');
+  const isNewTextRef = useRef(false); // 今の編集が「新規作成したてで未確定」かどうか
 
   const cvs = useRef(null), ovl = useRef(null), stageWrap = useRef(null), stageBox = useRef(null);
   const [paperW, setPaperW] = useState(DEFAULT_PW);
@@ -168,6 +183,10 @@ function App() {
   const SZ = useRef(penSize); useEffect(()=>{ SZ.current = penSize; }, [penSize]);
   const FS = useRef(fontSize); useEffect(()=>{ FS.current = fontSize; }, [fontSize]);
   const SEL = useRef(selected); useEffect(()=>{ SEL.current = selected; }, [selected]);
+  const EID = useRef(null); useEffect(()=>{ EID.current = editingId; }, [editingId]);
+  const EV = useRef(''); useEffect(()=>{ EV.current = editingVal; }, [editingVal]);
+  const EFS = useRef(30); useEffect(()=>{ EFS.current = editingFontSize; }, [editingFontSize]);
+  const ECOL = useRef('#000000'); useEffect(()=>{ ECOL.current = editingColor; }, [editingColor]);
 
   const drg = useRef(null);   // { mode:'move'|'resize', startPos, orig }
   const strokePt = useRef(null);
@@ -238,7 +257,7 @@ function App() {
     page.textboxes.forEach(t => {
       ctx.save();
       ctx.font = `700 ${t.fontSize}px "M PLUS Rounded 1c",sans-serif`;
-      ctx.fillStyle = '#222';
+      ctx.fillStyle = t.color || '#000000';
       ctx.textBaseline = 'top';
       const lines = wrapLines(ctx, t.text || '', t.w - 8);
       const lh = t.fontSize * 1.25;
@@ -375,6 +394,7 @@ function App() {
   /* ---------- ポインタイベント ---------- */
   const onDown = useCallback((e) => {
     e.preventDefault();
+    if (EID.current != null) commitEditingText(); // 編集中に他をタップしたら先に確定する
     const pos = gpos(e);
     const t = TL.current;
     const page = PG.current[PI.current]; if (!page) return;
@@ -400,10 +420,11 @@ function App() {
     if (t === 'text') {
       // テキストはページの中だけに配置（作業スペースには置かない）
       if (pos.x < 0 || pos.x > PWR.current || pos.y < 0 || pos.y > PHR.current) return;
-      const nt = { id: ntid(), x: pos.x-90, y: pos.y-30, w:180, h:60, text:'', fontSize: FS.current, lockMove:false, lockSize:false };
+      const nt = { id: ntid(), x: pos.x-90, y: pos.y-30, w:180, h:60, text:'', fontSize: FS.current, color: CR.current, lockMove:false, lockSize:false };
       setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, textboxes:[...pg.textboxes, nt] }));
       setSelected({ type:'text', obj: nt });
-      setEditingId(nt.id); setEditingVal('');
+      isNewTextRef.current = true;
+      setEditingId(nt.id); setEditingVal(''); setEditingFontSize(nt.fontSize); setEditingColor(nt.color);
       return;
     }
 
@@ -417,6 +438,7 @@ function App() {
   /* ダブルクリック／ダブルタップで直接テキスト編集に入る */
   const onDblClick = useCallback((e) => {
     if (TL.current !== 'select') return;
+    if (EID.current != null) commitEditingText();
     const pos = gpos(e);
     const page = PG.current[PI.current]; if (!page) return;
     for (let i=page.textboxes.length-1;i>=0;i--) {
@@ -424,7 +446,8 @@ function App() {
       if (hitBody(pos, tb, 'text')) {
         if (tb.lockMove || tb.lockSize) return; // ロック中は編集不可
         setSelected({ type:'text', obj: tb });
-        setEditingId(tb.id); setEditingVal(tb.text || '');
+        isNewTextRef.current = false;
+        setEditingId(tb.id); setEditingVal(tb.text || ''); setEditingFontSize(tb.fontSize||30); setEditingColor(tb.color||'#000000');
         return;
       }
     }
@@ -487,21 +510,34 @@ function App() {
     }
   }, [mkThumb]);
 
-  /* ---------- テキスト編集 ---------- */
+  /* ---------- テキスト編集 ----------
+     ref経由で読むことで、フリーズされたuseCallback(onDown等)からも安全に呼び出せるようにする */
   const commitEditingText = () => {
-    if (editingId == null) return;
+    if (EID.current == null) return;
+    const id = EID.current, val = EV.current, fs = EFS.current, col = ECOL.current;
     const page = PG.current[PI.current];
-    const val = editingVal;
     setPages(p => p.map((pg,i) => i!==PI.current ? pg : {
       ...pg,
       textboxes: val.trim() === ''
-        ? pg.textboxes.filter(tb => tb.id !== editingId)
-        : pg.textboxes.map(tb => tb.id === editingId ? { ...tb, text: val } : tb)
+        ? pg.textboxes.filter(tb => tb.id !== id)
+        : pg.textboxes.map(tb => tb.id === id ? { ...tb, text: val, fontSize: fs, color: col } : tb)
     }));
     if (val.trim() === '') setSelected(null);
-    else setSelected(s => s && s.obj.id === editingId ? { ...s, obj: { ...s.obj, text: val } } : s);
+    else setSelected(s => s && s.obj.id === id ? { ...s, obj: { ...s.obj, text: val, fontSize: fs, color: col } } : s);
     setEditingId(null); setEditingVal('');
     setTimeout(() => { if (page) mkThumb(PG.current[PI.current]); }, 0);
+  };
+  const cancelEditingText = () => {
+    if (EID.current == null) return;
+    const id = EID.current;
+    if (isNewTextRef.current) {
+      // 新規作成したてで未確定なら、そのまま取り消して消す
+      setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, textboxes: pg.textboxes.filter(tb => tb.id !== id) }));
+      setSelected(null);
+      setTimeout(() => { const page = PG.current[PI.current]; if (page) mkThumb(page); }, 0);
+    }
+    // 既存テキストの編集中キャンセルなら、pagesは未変更のためそのまま閉じるだけでよい
+    setEditingId(null); setEditingVal('');
   };
 
   /* ---------- 選択オブジェクト操作 ---------- */
@@ -580,11 +616,13 @@ function App() {
 
   /* ---------- ページ操作 ---------- */
   const addPage = () => {
+    if (EID.current != null) commitEditingText();
     const np = mkPage();
     setPages(p => { const n=[...p]; n.splice(pageIdx+1,0,np); return n; });
     setPageIdx(pageIdx+1); setSelected(null);
   };
   const copyPage = () => {
+    if (EID.current != null) commitEditingText();
     const src = pages[pageIdx];
     const np = {
       id: npid(), background: src.background,
@@ -598,11 +636,13 @@ function App() {
     setPageIdx(pageIdx+1); setSelected(null);
   };
   const delPage = () => {
+    if (EID.current != null) commitEditingText();
     if (pages.length<=1) return;
     setPages(p => p.filter((_,i)=>i!==pageIdx));
     setPageIdx(Math.max(0,pageIdx-1)); setSelected(null);
   };
   const movePage = (dir) => {
+    if (EID.current != null) commitEditingText();
     const ni = pageIdx+dir; if (ni<0||ni>=pages.length) return;
     setPages(p => { const n=[...p]; [n[pageIdx],n[ni]]=[n[ni],n[pageIdx]]; return n; });
     setPageIdx(ni);
@@ -820,6 +860,7 @@ function App() {
   useEffect(() => {
     const h = e => {
       if ((e.ctrlKey||e.metaKey) && e.key==='z') { e.preventDefault(); doUndo(); }
+      if (e.key==='Escape' && editingId!=null) { cancelEditingText(); }
       if ((e.key==='Delete'||e.key==='Backspace') && SEL.current && editingId==null) { deleteSelected(); }
     };
     window.addEventListener('keydown', h);
@@ -877,23 +918,69 @@ function App() {
 
         <div className="stage" ref={stageBox}>
           <div className="canvas-wrap" ref={stageWrap} style={{ width: dispSize.w, height: dispSize.h }}>
-            <canvas id="cv-main" ref={cvs} width={paperW+MARGIN*2} height={paperH+MARGIN*2}
-              style={{ cursor }}
-              onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
-              onDoubleClick={onDblClick} />
-            <canvas id="cv-ovl" ref={ovl} width={paperW+MARGIN*2} height={paperH+MARGIN*2} />
+            <div className="canvas-clip">
+              <canvas id="cv-main" ref={cvs} width={paperW+MARGIN*2} height={paperH+MARGIN*2}
+                style={{ cursor }}
+                onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
+                onDoubleClick={onDblClick} />
+              <canvas id="cv-ovl" ref={ovl} width={paperW+MARGIN*2} height={paperH+MARGIN*2} />
+            </div>
             {editingId!=null && (() => {
               const tb = page.textboxes.find(t=>t.id===editingId); if (!tb) return null;
               const stageW = paperW+MARGIN*2, stageH = paperH+MARGIN*2;
               const scale = dispSize.w / stageW;
               return (
                 <textarea autoFocus className="text-editor"
-                  style={{ left:((MARGIN+tb.x)/stageW*100)+'%', top:((MARGIN+tb.y)/stageH*100)+'%', width:(tb.w/stageW*100)+'%', height:(tb.h/stageH*100)+'%', fontSize:(tb.fontSize*scale)+'px' }}
-                  value={editingVal} onChange={e=>setEditingVal(e.target.value)}
-                  onBlur={commitEditingText} />
+                  style={{ left:((MARGIN+tb.x)/stageW*100)+'%', top:((MARGIN+tb.y)/stageH*100)+'%', width:(tb.w/stageW*100)+'%', height:(tb.h/stageH*100)+'%', fontSize:(editingFontSize*scale)+'px', color: editingColor }}
+                  value={editingVal} onChange={e=>setEditingVal(e.target.value)} />
+              );
+            })()}
+            {sel && editingId==null && (() => {
+              const o = sel.obj;
+              const stageW = paperW+MARGIN*2, stageH = paperH+MARGIN*2;
+              let x1,y1,w,h;
+              if (sel.type==='material') { x1=o.x-o.w/2; y1=o.y-o.h/2; w=o.w; h=o.h; }
+              else { x1=o.x; y1=o.y; w=o.w; h=o.h; }
+              const leftPct = (MARGIN+x1)/stageW*100, topPct = (MARGIN+y1)/stageH*100;
+              const wPct = w/stageW*100, hPct = h/stageH*100;
+              const editable = !o.lockMove && !o.lockSize;
+              return (
+                <React.Fragment>
+                  {editable && (
+                    <button className="float-btn danger" title="削除"
+                      style={{ left:leftPct+'%', top:topPct+'%' }} onClick={deleteSelected}>🗑</button>
+                  )}
+                  {editable && (
+                    <button className="float-btn" title="コピー"
+                      style={{ left:(leftPct+wPct)+'%', top:topPct+'%' }} onClick={duplicateSelected}>⊕</button>
+                  )}
+                  {sel.type==='material' && !o.lockMove && (<>
+                    <button className="float-btn rotate" title="左に回転"
+                      style={{ left:`calc(${leftPct+wPct/2}% - 20px)`, top:`calc(${topPct}% - 26px)` }}
+                      onClick={()=>patchSelected({rotation:(o.rotation||0)-15})}>↺</button>
+                    <button className="float-btn rotate" title="右に回転"
+                      style={{ left:`calc(${leftPct+wPct/2}% + 20px)`, top:`calc(${topPct}% - 26px)` }}
+                      onClick={()=>patchSelected({rotation:(o.rotation||0)+15})}>↻</button>
+                  </>)}
+                </React.Fragment>
               );
             })()}
           </div>
+
+          {editingId!=null && (
+            <div className="obj-panel">
+              <div className="swatches">
+                {PALETTE.map(c => (
+                  <button key={c} className={"swatch"+(editingColor===c?' sel':'')} style={{background:c}} onClick={()=>setEditingColor(c)} />
+                ))}
+              </div>
+              <span className="small-lbl">おおきさ</span>
+              <input type="range" min={12} max={120} value={editingFontSize} onChange={e=>setEditingFontSize(+e.target.value)} style={{width:70}} />
+              <span style={{fontSize:11,color:'#889'}}>{editingFontSize}px</span>
+              <button className="abtn hi" onClick={commitEditingText}>✓ 確定</button>
+              <button className="abtn danger" onClick={cancelEditingText}>✕ 取消</button>
+            </div>
+          )}
 
           {sel && editingId==null && (() => {
             const o = sel.obj;
@@ -902,15 +989,9 @@ function App() {
               <div className="obj-panel">
                 <button className="abtn" onClick={()=>patchSelected({lockMove:!o.lockMove})}>{o.lockMove?'📌 移動ロック解除':'📌 移動ロックする'}</button>
                 <button className="abtn" onClick={()=>patchSelected({lockSize:!o.lockSize})}>{o.lockSize?'📐 サイズロック解除':'📐 サイズロックする'}</button>
-                {sel.type==='material' && !o.lockMove && (<>
-                  <button className="abtn" onClick={()=>patchSelected({rotation:(o.rotation||0)-15})}>↺15°</button>
-                  <button className="abtn" onClick={()=>patchSelected({rotation:(o.rotation||0)+15})}>↻15°</button>
-                </>)}
                 {sel.type==='text' && editable && (
-                  <button className="abtn" onClick={()=>{ setEditingId(o.id); setEditingVal(o.text||''); }}>✏️ 文字を編集</button>
+                  <button className="abtn" onClick={()=>{ isNewTextRef.current=false; setEditingId(o.id); setEditingVal(o.text||''); setEditingFontSize(o.fontSize||30); setEditingColor(o.color||'#000000'); }}>✏️ 文字を編集</button>
                 )}
-                {editable && <button className="abtn" onClick={duplicateSelected}>⊕ コピー</button>}
-                {editable && <button className="abtn danger" onClick={deleteSelected}>✕ 削除</button>}
               </div>
             );
           })()}
@@ -927,7 +1008,7 @@ function App() {
           </div>
           <div className="pages">
             {pages.map((pg,i) => (
-              <div key={pg.id} className={"page-thumb"+(i===pageIdx?' sel':'')} onClick={()=>{setPageIdx(i); setSelected(null);}}>
+              <div key={pg.id} className={"page-thumb"+(i===pageIdx?' sel':'')} onClick={()=>{ if(EID.current!=null) commitEditingText(); setPageIdx(i); setSelected(null); }}>
                 <span className="num">{i+1}</span>
                 {thumbs[pg.id] && <img src={thumbs[pg.id]} alt="" />}
               </div>
