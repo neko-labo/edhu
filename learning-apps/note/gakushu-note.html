@@ -795,96 +795,6 @@ function App() {
     setStatus('✓ PDFを書き出しました（全ページ）');
   };
 
-  /* ---------- 共有リンク（このHTML自体のURL＋データをハッシュに埋め込む） ----------
-     ※ このファイルをどこかのURL（学校のサーバー、GitHub Pages、Googleドライブ公開リンクなど）に
-        置いた状態で使う想定。ローカルのファイルをそのまま開いているだけだと、
-        別の端末では同じ場所を開けないためリンクが機能しない点に注意。
-     base64は "+" "/" "=" を含み、チャットアプリ等でリンクとして扱われるときに
-     末尾の"="が欠けたり記号が壊れたりすることがあるため、URL-safeなbase64url
-     （"-" "_"のみ・パディングなし）に変換して埋め込む。 */
-  function bytesToBase64Url(bytes) {
-    let binary = ''; const chunk = 0x8000;
-    for (let i=0;i<bytes.length;i+=chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
-    return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  }
-  function base64UrlToBytes(s) {
-    let b64 = String(s).replace(/-/g,'+').replace(/_/g,'/');
-    while (b64.length % 4) b64 += '=';
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  }
-  async function compressToParam(obj) {
-    const str = JSON.stringify(obj);
-    const bytes = new TextEncoder().encode(str);
-    if (window.CompressionStream) {
-      // Blob().stream().pipeThrough() を使うと、書き込みと読み取りが内部で並行して
-      // 処理されるため、データが大きくてもフリーズしない（writerを手動制御して
-      // write→closeを待ってから読み始めると、内部バッファが詰まって固まることがある）
-      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
-      const buf = await new Response(stream).arrayBuffer();
-      return 'gz.' + bytesToBase64Url(new Uint8Array(buf));
-    }
-    return 'raw.' + bytesToBase64Url(bytes);
-  }
-  async function decompressFromParam(param) {
-    const dot = param.indexOf('.');
-    const tag = param.slice(0, dot), data = param.slice(dot+1);
-    const bytes = base64UrlToBytes(data);
-    if (tag === 'gz' && window.DecompressionStream) {
-      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-      const buf = await new Response(stream).arrayBuffer();
-      return JSON.parse(new TextDecoder().decode(buf));
-    }
-    return JSON.parse(new TextDecoder().decode(bytes));
-  }
-
-  const copyShareLink = async () => {
-    const withTimeout = (p, ms, label) => Promise.race([
-      p,
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout:'+label)), ms)),
-    ]);
-    try {
-      setStatus('リンクを作成中…');
-      const param = await withTimeout(compressToParam(buildExportData()), 15000, '圧縮');
-      const base = location.origin + location.pathname;
-      const link = base + '#ws=' + param;
-      await withTimeout(navigator.clipboard.writeText(link), 8000, 'コピー');
-      if (link.length > 1500000) {
-        setStatus('⚠ リンクを作成しましたが、とても長いです（画像が多いかも）。コピーはできています');
-      } else {
-        setStatus('✓ 共有リンクをコピーしました（' + link.length + '文字）');
-      }
-    } catch (e) {
-      console.error(e);
-      if (String(e && e.message).startsWith('timeout')) {
-        setStatus('✗ リンク作成がタイムアウトしました。画像を減らすかファイル保存を使ってね');
-      } else {
-        setStatus('✗ リンク作成に失敗しました。ファイル保存を使ってね');
-      }
-    }
-  };
-
-  // 起動時：URLに #ws=... があれば自動的に読み込む
-  useEffect(() => {
-    try {
-      const h = location.hash;
-      if (h && h.startsWith('#ws=')) {
-        setStatus('リンクからワークシートを読み込み中…');
-        let param = h.slice(4);
-        try { param = decodeURIComponent(param); } catch (e) { /* 元のままでも進める */ }
-        decompressFromParam(param)
-          .then(d => loadFromData(d))
-          .then(() => {
-            setStatus('✓ リンクからワークシートを開きました');
-            history.replaceState(null, '', location.pathname + location.search); // ハッシュを消して再読込時の重複実行を防ぐ
-          })
-          .catch((err) => { console.error(err); setStatus('✗ リンクの読み込みに失敗しました（リンクが途中で切れている可能性があります）'); });
-      }
-    } catch (e) { console.error(e); }
-  }, []);
-
   /* ---------- 表示サイズ（コンテナに合わせて可変） ---------- */
   useEffect(() => {
     const calc = () => {
@@ -933,7 +843,6 @@ function App() {
         <button className="abtn" onClick={load}>📂 開く</button>
         <button className="abtn" onClick={copyClipboard}>📋 コピー</button>
         <button className="abtn" onClick={pasteClipboard}>📥 貼付</button>
-        <button className="abtn" onClick={copyShareLink}>🔗 共有リンク</button>
         <button className="abtn hi" onClick={downloadImage}>🖼 画像</button>
         <button className="abtn hi" onClick={downloadPDF}>📕 PDF</button>
         <span className="status">{status}</span>
