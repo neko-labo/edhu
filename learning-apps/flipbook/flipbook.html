@@ -45,6 +45,35 @@ function normRect(x1, y1, x2, y2) {
   return { x: Math.min(x1,x2), y: Math.min(y1,y2), w: Math.abs(x2-x1), h: Math.abs(y2-y1) };
 }
 
+const HANDLE_R = 12, HANDLE_DIST = 26, HANDLE_HIT = 17;
+function drawHandle(ctx, x, y, color, label) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, HANDLE_R, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y + 0.5);
+  ctx.restore();
+}
+function objLocalToWorld(obj, lx, ly) {
+  const rot = (obj.rotation || 0) * Math.PI / 180;
+  const cosr = Math.cos(rot), sinr = Math.sin(rot);
+  return { x: obj.x + lx * cosr - ly * sinr, y: obj.y + lx * sinr + ly * cosr };
+}
+function worldToObjLocal(obj, wx, wy) {
+  const rot = (obj.rotation || 0) * Math.PI / 180;
+  const cosr = Math.cos(-rot), sinr = Math.sin(-rot);
+  const dx = wx - obj.x, dy = wy - obj.y;
+  return { x: dx * cosr - dy * sinr, y: dx * sinr + dy * cosr };
+}
+
 const PALETTE = ['#000000','#ffffff','#ff2222','#ff8800','#ffee00','#22cc22',
                  '#2266ff','#8822ff','#ff44cc','#884400','#888888','#cccccc'];
 
@@ -76,6 +105,8 @@ function App() {
   const drg = useRef(false);
   const lxy = useRef(null);
   const selStart = useRef(null);
+  const dragMode = useRef(null); // 'move' | 'rotate' | 'scale'
+  const scaleStart = useRef(null); // { dist, scale }
   const undoStacks = useRef({});
   const pushUndo = (frameId, layerId) => {
     const key = `${frameId}_${layerId}`;
@@ -156,10 +187,11 @@ function App() {
           if (!mat) return;
           const img = imgCache.current[mat.id];
           if (!img || !img.complete) return;
+          const sc = obj.scale || 1;
           ctx.save();
           ctx.translate(obj.x, obj.y);
           ctx.rotate((obj.rotation || 0) * Math.PI / 180);
-          ctx.drawImage(img, -mat.w/2, -mat.h/2, mat.w, mat.h);
+          ctx.drawImage(img, -mat.w*sc/2, -mat.h*sc/2, mat.w*sc, mat.h*sc);
           ctx.restore();
         });
       }
@@ -177,10 +209,11 @@ function App() {
         if (!mat) return;
         const img = imgCache.current[mat.id];
         if (!img || !img.complete) return;
+        const sc = obj.scale || 1;
         ctx.save();
         ctx.translate(obj.x, obj.y);
         ctx.rotate((obj.rotation || 0) * Math.PI / 180);
-        ctx.drawImage(img, -mat.w/2, -mat.h/2, mat.w, mat.h);
+        ctx.drawImage(img, -mat.w*sc/2, -mat.h*sc/2, mat.w*sc, mat.h*sc);
         ctx.restore();
       });
     }
@@ -237,20 +270,40 @@ function App() {
       }
     }
 
-    // Draw selected object outline
+    // Draw selected object outline + handle icons
     if (SOB.current && TR.current === 'select') {
       const obj = SOB.current;
       const mat = materials.find(m => m.id === obj.materialId);
       if (mat) {
-        const w = mat.w;
-        const h = mat.h;
+        const sc = obj.scale || 1;
+        const hw = (mat.w * sc) / 2, hh = (mat.h * sc) / 2;
+        const c1 = objLocalToWorld(obj, -hw, -hh);
+        const c2 = objLocalToWorld(obj, hw, -hh);
+        const c3 = objLocalToWorld(obj, hw, hh);
+        const c4 = objLocalToWorld(obj, -hw, hh);
+        const rotHandle = objLocalToWorld(obj, 0, -hh - HANDLE_DIST);
+        const topMid = objLocalToWorld(obj, 0, -hh);
+
         ctx.save();
-        ctx.translate(obj.x, obj.y);
-        ctx.rotate((obj.rotation || 0) * Math.PI / 180);
         ctx.strokeStyle = '#ff6b9d';
         ctx.lineWidth = 2;
-        ctx.strokeRect(-w/2, -h/2, w, h);
+        ctx.setLineDash([5, 3]);
+        ctx.beginPath();
+        ctx.moveTo(c1.x, c1.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(c3.x, c3.y); ctx.lineTo(c4.x, c4.y); ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.strokeStyle = 'rgba(155,107,255,0.8)';
+        ctx.beginPath();
+        ctx.moveTo(topMid.x, topMid.y);
+        ctx.lineTo(rotHandle.x, rotHandle.y);
+        ctx.stroke();
         ctx.restore();
+
+        drawHandle(ctx, c2.x, c2.y, '#ff4466', '✕');
+        drawHandle(ctx, c1.x, c1.y, '#ffa500', '⧉');
+        drawHandle(ctx, rotHandle.x, rotHandle.y, '#9b6bff', '↻');
+        drawHandle(ctx, c3.x, c3.y, '#5ba8ff', '⤡');
       }
     }
   }, [materials]);
@@ -322,21 +375,67 @@ function App() {
 
     if (t === 'select') {
       const frame = FR.current[FI.current];
+
+      // Check handle hits on the currently selected object first
+      if (SOB.current) {
+        const obj = SOB.current;
+        const mat = materials.find(m => m.id === obj.materialId);
+        if (mat) {
+          const sc = obj.scale || 1;
+          const hw = (mat.w * sc) / 2, hh = (mat.h * sc) / 2;
+          const loc = worldToObjLocal(obj, pos.x, pos.y);
+          const near = (ax, ay) => Math.hypot(loc.x - ax, loc.y - ay) < HANDLE_HIT;
+
+          if (near(0, -hh - HANDLE_DIST)) {
+            dragMode.current = 'rotate';
+            drg.current = true; lxy.current = pos;
+            return;
+          }
+          if (near(hw, hh)) {
+            dragMode.current = 'scale';
+            drg.current = true; lxy.current = pos;
+            scaleStart.current = { dist: Math.hypot(pos.x - obj.x, pos.y - obj.y), scale: sc };
+            return;
+          }
+          if (near(hw, -hh)) {
+            const curFrame = FR.current[FI.current];
+            setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: f.objects.filter(o => o.id !== obj.id) }));
+            setSelObj(null);
+            rerender(); if (curFrame) mkThumb(curFrame);
+            setStatus("素材を削除しました");
+            return;
+          }
+          if (near(-hw, -hh)) {
+            const newObj = { ...obj, id: noid(), x: obj.x + 14, y: obj.y + 14 };
+            const curFrame = FR.current[FI.current];
+            setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: [...f.objects, newObj] }));
+            setSelObj(newObj);
+            rerender(); if (curFrame) mkThumb(curFrame);
+            setStatus("素材をコピーしました");
+            return;
+          }
+        }
+      }
+
       if (frame && frame.objects && frame.objects.length > 0) {
         for (let i = frame.objects.length - 1; i >= 0; i--) {
           const obj = frame.objects[i];
           const mat = materials.find(m => m.id === obj.materialId);
           if (!mat) continue;
+          const sc = obj.scale || 1;
           const dx = pos.x - obj.x;
           const dy = pos.y - obj.y;
-          if (Math.abs(dx) < mat.w/2 && Math.abs(dy) < mat.h/2) {
+          if (Math.abs(dx) < mat.w*sc/2 && Math.abs(dy) < mat.h*sc/2) {
             setSelObj(obj);
+            dragMode.current = 'move';
             drg.current = true;
             lxy.current = pos;
             return;
           }
         }
       }
+      setSelObj(null);
+      dragMode.current = null;
       selStart.current = pos;
       drg.current = true;
       setSelRect(null);
@@ -351,7 +450,8 @@ function App() {
         materialId: mat.id,
         x: pos.x,
         y: pos.y,
-        rotation: 0
+        rotation: 0,
+        scale: 1
       };
       setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: [...(f.objects || []), newObj] }));
       rerender(); mkThumb(frame);
@@ -394,6 +494,24 @@ function App() {
     const t = TR.current;
 
     if (t === 'select' && drg.current && SOB.current && lxy.current) {
+      const obj = SOB.current;
+      if (dragMode.current === 'rotate') {
+        const dx = pos.x - obj.x, dy = pos.y - obj.y;
+        const rotation = Math.atan2(dx, -dy) * 180 / Math.PI;
+        setSelObj(p => ({ ...p, rotation }));
+        rerender();
+        return;
+      }
+      if (dragMode.current === 'scale') {
+        const start = scaleStart.current;
+        if (start && start.dist > 1) {
+          const curDist = Math.hypot(pos.x - obj.x, pos.y - obj.y);
+          const newScale = Math.max(0.2, Math.min(5, start.scale * (curDist / start.dist)));
+          setSelObj(p => ({ ...p, scale: newScale }));
+          rerender();
+        }
+        return;
+      }
       const dx = pos.x - lxy.current.x;
       const dy = pos.y - lxy.current.y;
       setSelObj(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
@@ -422,7 +540,7 @@ function App() {
         }));
         rerender(); mkThumb(frame);
       }
-      drg.current = false; lxy.current = null;
+      drg.current = false; lxy.current = null; dragMode.current = null; scaleStart.current = null;
       return;
     }
     if (t === 'select' && drg.current && selStart.current) {
@@ -571,32 +689,6 @@ function App() {
     setStatus("「" + mat.name + "」をスタンプ中");
   };
 
-  const deleteObj = objId => {
-    const frame = frames[fi];
-    setFrames(p => p.map((f, i) => i !== fi ? f : { ...f, objects: f.objects.filter(o => o.id !== objId) }));
-    setSelObj(null);
-    rerender(); mkThumb(frame);
-    setStatus("素材を削除しました");
-  };
-
-  const copyObj = obj => {
-    const newObj = { ...obj, id: noid() };
-    const frame = frames[fi];
-    setFrames(p => p.map((f, i) => i !== fi ? f : { ...f, objects: [...f.objects, newObj] }));
-    setSelObj(newObj);
-    rerender(); mkThumb(frame);
-  };
-
-  const rotateObj = (obj, deg) => {
-    const newObj = { ...obj, rotation: (obj.rotation || 0) + deg };
-    setSelObj(newObj);
-    const frame = frames[fi];
-    setFrames(p => p.map((f, i) => i !== fi ? f : { ...f, objects: f.objects.map(o => o.id === obj.id ? newObj : o) }));
-    rerender(); mkThumb(frame);
-  };
-
-  
-
   const expGif = () => {
     if (!gifOk || !window.GIF || !gifWorkerUrl.current) { setStatus("GIF機能を読み込み中..."); return; }
     setGifBusy(true);
@@ -737,11 +829,8 @@ function App() {
               style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', borderRadius:3 }} />
           </div>
           {selObj && tool === 'select' && (
-            <div style={{ display:'flex', gap:8, marginTop:12, alignItems:'center', background:'rgba(255,107,157,0.1)', padding:'8px 12px', borderRadius:12, border:'1px solid rgba(255,107,157,0.3)' }}>
-              <button onClick={() => rotateObj(selObj, -15)} style={{ padding:'4px 8px', background:'#ff6b9d', color:'white', border:'none', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight:600 }}>↻ -15°</button>
-              <button onClick={() => rotateObj(selObj, 15)} style={{ padding:'4px 8px', background:'#ff6b9d', color:'white', border:'none', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight:600 }}>↻ +15°</button>
-              <button onClick={() => copyObj(selObj)} style={{ padding:'4px 8px', background:'#ffa500', color:'white', border:'none', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight:600 }}>⊕ コピー</button>
-              <button onClick={() => deleteObj(selObj.id)} style={{ padding:'4px 8px', background:'#ff4466', color:'white', border:'none', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight:600 }}>✕ 削除</button>
+            <div style={{ fontSize:10.5, color:'#a88', marginTop:8, textAlign:'center', lineHeight:1.6 }}>
+              ✕けす　⧉コピー　↻ドラッグでかいてん　⤡ドラッグでおおきさ
             </div>
           )}
         </div>
