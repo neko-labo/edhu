@@ -103,6 +103,7 @@ function App() {
   const ovl = useRef(null);
   const lcs = useRef({});
   const drg = useRef(false);
+  const touchGuardUntil = useRef(0); // timestamp until which synthetic ghost mouse events should be ignored
   const lxy = useRef(null);
   const selStart = useRef(null);
   const dragMode = useRef(null); // 'move' | 'rotate' | 'scale'
@@ -369,6 +370,8 @@ function App() {
   };
 
   const onDown = useCallback(e => {
+    if (e.type === 'touchstart') { touchGuardUntil.current = Date.now() + 600; }
+    else if (e.type === 'mousedown' && Date.now() < touchGuardUntil.current) return;
     if (playing) return; e.preventDefault();
     const pos = gpos(e);
     const t = TR.current;
@@ -489,6 +492,7 @@ function App() {
   }, [playing, comp, glc, rerender, mkThumb, materials]);
 
   const onMove = useCallback(e => {
+    if (e.type.indexOf('mouse') === 0 && Date.now() < touchGuardUntil.current) return;
     e.preventDefault();
     const pos = gpos(e);
     const t = TR.current;
@@ -531,6 +535,7 @@ function App() {
   }, [drawOverlay]);
 
   const onUp = useCallback(e => {
+    if (e.type.indexOf('mouse') === 0 && Date.now() < touchGuardUntil.current) return;
     const t = TR.current;
     if (t === 'select' && drg.current && SOB.current) {
       const frame = FR.current[FI.current];
