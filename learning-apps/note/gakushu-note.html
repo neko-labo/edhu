@@ -111,8 +111,11 @@ button{ font-family:inherit; cursor:pointer; }
 .sep{ width:100%; height:1px; background:rgba(0,0,0,0.08); margin:3px 0; }
 .small-lbl{ font-size:9px; color:#889; text-align:center; }
 .swatches{ display:flex; flex-wrap:wrap; gap:3px; width:60px; justify-content:center; }
-.swatch{ width:15px; height:15px; border-radius:50%; border:2px solid #ddd; padding:0; }
+.swatch{ width:15px; height:15px; border-radius:50%; border:2px solid #ddd; padding:0; flex-shrink:0; }
 .swatch.sel{ border-color:var(--pink); box-shadow:0 0 5px rgba(255,107,157,0.6); }
+.swatch.none{ background:
+  linear-gradient(135deg, transparent 0%, transparent 44%, #ff4466 44%, #ff4466 56%, transparent 56%, transparent 100%),
+  #ffffff; }
 </style>
 </head>
 <body>
@@ -125,11 +128,21 @@ const DEFAULT_PW = 700, DEFAULT_PH = 990; // 初期の用紙サイズ（論理�
 const MARGIN = 160;                 // ページの外側に確保する「作業スペース」の幅(px, 論理座標)
 const HANDLE = 24;                  // リサイズハンドルの当たり判定サイズ(px, 論理座標)
 const PALETTE = ['#000000','#ff2222','#ff8800','#ffee00','#22cc22','#2266ff','#8822ff','#ff44cc'];
+const TEXT_BG_PALETTE = ['#fff59b','#ffd0e8','#cfeaff','#d3f7db','#e8d6ff','#ffe0b8','#ffffff','#000000'];
+const SHAPE_KINDS = [
+  { id:'rect', icon:'▭', label:'四角' },
+  { id:'ellipse', icon:'◯', label:'丸' },
+  { id:'triangle', icon:'▲', label:'三角' },
+  { id:'star', icon:'★', label:'星' },
+];
+const AUTOSAVE_KEY = 'gakushu_note_autosave_v1'; // ブラウザ内自動保存（このブラウザ・この端末だけで有効）
 
-let _pid=0,_mid=0,_tid=0;
-const npid=()=>++_pid, nmid=()=>++_mid, ntid=()=>++_tid;
-const mkPage = () => ({ id:npid(), background:null, materials:[], textboxes:[] });
+let _pid=0,_mid=0,_tid=0,_shid=0;
+const npid=()=>++_pid, nmid=()=>++_mid, ntid=()=>++_tid, nshid=()=>++_shid;
+const mkPage = () => ({ id:npid(), background:null, materials:[], textboxes:[], shapes:[] });
 const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+const arrKeyOf = (type) => type==='material' ? 'materials' : type==='shape' ? 'shapes' : 'textboxes';
+const isCentered = (type) => type==='material' || type==='shape';
 
 /* ===================== テキスト折り返し ===================== */
 function wrapLines(ctx, text, maxWidth) {
@@ -149,6 +162,45 @@ function wrapLines(ctx, text, maxWidth) {
   return lines;
 }
 
+/* ===================== 図形パス ===================== */
+function drawShapePath(ctx, kind, w, h) {
+  ctx.beginPath();
+  if (kind === 'ellipse') {
+    ctx.ellipse(0, 0, Math.max(1,w/2), Math.max(1,h/2), 0, 0, Math.PI*2);
+  } else if (kind === 'triangle') {
+    ctx.moveTo(0, -h/2);
+    ctx.lineTo(w/2, h/2);
+    ctx.lineTo(-w/2, h/2);
+    ctx.closePath();
+  } else if (kind === 'star') {
+    const spikes = 5, outerR = Math.min(w,h)/2, innerR = outerR*0.42;
+    let rot = -Math.PI/2, step = Math.PI/spikes;
+    ctx.moveTo(0, -outerR);
+    for (let i=0;i<spikes;i++) {
+      rot += step; ctx.lineTo(Math.cos(rot)*innerR, Math.sin(rot)*innerR);
+      rot += step; ctx.lineTo(Math.cos(rot)*outerR, Math.sin(rot)*outerR);
+    }
+    ctx.closePath();
+  } else { // rect
+    ctx.rect(-w/2, -h/2, w, h);
+  }
+}
+
+/* ===================== 色スウォッチ（共通・「なし」対応） ===================== */
+function ColorSwatches({ value, onChange, palette, allowNone, size }) {
+  const s = size || 15;
+  return (
+    <div className="swatches" style={{width:'auto'}}>
+      {allowNone && (
+        <button className={"swatch none"+(!value?' sel':'')} style={{width:s,height:s}} title="なし（透明）" onClick={()=>onChange(null)} />
+      )}
+      {palette.map(c => (
+        <button key={c} className={"swatch"+(value===c?' sel':'')} style={{width:s,height:s,background:c}} onClick={()=>onChange(c)} />
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const [pages, setPages] = useState(() => [mkPage()]);
   const [pageIdx, setPageIdx] = useState(0);
@@ -163,6 +215,8 @@ function App() {
   const [editingVal, setEditingVal] = useState('');
   const [editingFontSize, setEditingFontSize] = useState(30);
   const [editingColor, setEditingColor] = useState('#000000');
+  const [editingBgColor, setEditingBgColor] = useState(null); // テキストボックスの背景色（null=透明）
+  const [shapeKind, setShapeKind] = useState('rect');         // 図形ツールで次に置く図形の種類
   const isNewTextRef = useRef(false); // 今の編集が「新規作成したてで未確定」かどうか
 
   const cvs = useRef(null), ovl = useRef(null), stageWrap = useRef(null), stageBox = useRef(null);
@@ -187,6 +241,8 @@ function App() {
   const EV = useRef(''); useEffect(()=>{ EV.current = editingVal; }, [editingVal]);
   const EFS = useRef(30); useEffect(()=>{ EFS.current = editingFontSize; }, [editingFontSize]);
   const ECOL = useRef('#000000'); useEffect(()=>{ ECOL.current = editingColor; }, [editingColor]);
+  const EBG = useRef(null); useEffect(()=>{ EBG.current = editingBgColor; }, [editingBgColor]);
+  const SK = useRef('rect'); useEffect(()=>{ SK.current = shapeKind; }, [shapeKind]);
 
   const drg = useRef(null);   // { mode:'move'|'resize', startPos, orig }
   const strokePt = useRef(null);
@@ -254,8 +310,20 @@ function App() {
       if (m.lockMove || m.lockSize) drawLockBadge(ctx, ox+m.x - m.w/2, oy+m.y - m.h/2, m.lockMove, m.lockSize);
     });
 
+    (page.shapes||[]).forEach(s => {
+      ctx.save();
+      ctx.translate(ox+s.x, oy+s.y);
+      ctx.rotate((s.rotation||0) * Math.PI/180);
+      drawShapePath(ctx, s.shapeType, s.w, s.h);
+      if (s.fillColor) { ctx.fillStyle = s.fillColor; ctx.fill(); }
+      if (s.strokeColor) { ctx.strokeStyle = s.strokeColor; ctx.lineWidth = s.strokeWidth||4; ctx.stroke(); }
+      ctx.restore();
+      if (s.lockMove || s.lockSize) drawLockBadge(ctx, ox+s.x - s.w/2, oy+s.y - s.h/2, s.lockMove, s.lockSize);
+    });
+
     page.textboxes.forEach(t => {
       ctx.save();
+      if (t.bgColor) { ctx.fillStyle = t.bgColor; ctx.fillRect(ox+t.x, oy+t.y, t.w, t.h); }
       ctx.font = `700 ${t.fontSize}px "M PLUS Rounded 1c",sans-serif`;
       ctx.fillStyle = t.color || '#000000';
       ctx.textBaseline = 'top';
@@ -288,11 +356,43 @@ function App() {
     comp(page, cvs.current.getContext('2d'), false);
   }, [comp]);
 
+  /* ---------- 自動保存（このブラウザに残す。手動の保存・開くとは別物） ----------
+     mkThumb は「見た目が変わった操作」の後にほぼ必ず呼ばれる箇所なので、
+     ここにフックすれば個別の操作ごとに呼び出しを足さなくても網羅できる。
+     画像やページ数が多いと容量オーバーで失敗することがあるため、その時だけ状態表示で知らせる。 */
+  const autosaveTimer = useRef(null);
+  const autosaveFailedRef = useRef(false);
+  const restoreDoneRef = useRef(false); // 起動時の自動保存復元が終わるまでは自動保存を走らせない（空データでの上書き事故防止）
+  const scheduleAutosave = useCallback(() => {
+    if (!restoreDoneRef.current) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      try {
+        const data = {
+          version: 2, paperW: PWR.current, paperH: PHR.current,
+          pages: PG.current.map(pg => ({
+            id: pg.id, background: pg.background, materials: pg.materials, textboxes: pg.textboxes, shapes: pg.shapes||[],
+            strokes: penLayers.current[pg.id] ? penLayers.current[pg.id].toDataURL('image/png') : null,
+          })),
+        };
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
+        autosaveFailedRef.current = false;
+      } catch (e) {
+        console.warn('自動保存に失敗しました', e);
+        if (!autosaveFailedRef.current) {
+          autosaveFailedRef.current = true;
+          setStatus('⚠ ブラウザへの自動保存に失敗しました（容量オーバーの可能性）。💾保存でファイルに残してね');
+        }
+      }
+    }, 800);
+  }, []);
+
   const mkThumb = useCallback((page) => {
     const tc = document.createElement('canvas'); tc.width = PWR.current; tc.height = PHR.current;
     comp(page, tc.getContext('2d'), true);
     setThumbs(p => ({ ...p, [page.id]: tc.toDataURL('image/png', 0.5) }));
-  }, [comp]);
+    scheduleAutosave();
+  }, [comp, scheduleAutosave]);
 
   useEffect(() => { rerender(); }, [pages, pageIdx, rerender]);
   useEffect(() => { const p = pages[pageIdx]; if (p) mkThumb(p); }, [pages, pageIdx, mkThumb]);
@@ -307,7 +407,7 @@ function App() {
     const sel = SEL.current; if (!sel) return;
     const o = sel.obj;
     let x1,y1,w,h;
-    if (sel.type === 'material') { x1 = ox+o.x - o.w/2; y1 = oy+o.y - o.h/2; w = o.w; h = o.h; }
+    if (isCentered(sel.type)) { x1 = ox+o.x - o.w/2; y1 = oy+o.y - o.h/2; w = o.w; h = o.h; }
     else { x1 = ox+o.x; y1 = oy+o.y; w = o.w; h = o.h; }
     ctx.save();
     // 半透明の塗り：選択中であることを一目で分かるように
@@ -374,16 +474,19 @@ function App() {
   /* ---------- 当たり判定 ---------- */
   function hitHandle(pos, o, type) {
     let x2,y2;
-    if (type==='material') { x2 = o.x+o.w/2; y2 = o.y+o.h/2; } else { x2 = o.x+o.w; y2 = o.y+o.h; }
+    if (isCentered(type)) { x2 = o.x+o.w/2; y2 = o.y+o.h/2; } else { x2 = o.x+o.w; y2 = o.y+o.h; }
     return Math.abs(pos.x-x2) < HANDLE && Math.abs(pos.y-y2) < HANDLE;
   }
   function hitBody(pos, o, type) {
-    if (type==='material') return Math.abs(pos.x-o.x) < o.w/2 && Math.abs(pos.y-o.y) < o.h/2;
+    if (isCentered(type)) return Math.abs(pos.x-o.x) < o.w/2 && Math.abs(pos.y-o.y) < o.h/2;
     return pos.x>=o.x && pos.x<=o.x+o.w && pos.y>=o.y && pos.y<=o.y+o.h;
   }
   function findHit(page, pos) {
     for (let i=page.textboxes.length-1;i>=0;i--) {
       if (hitBody(pos, page.textboxes[i], 'text')) return { type:'text', obj: page.textboxes[i] };
+    }
+    for (let i=(page.shapes||[]).length-1;i>=0;i--) {
+      if (hitBody(pos, page.shapes[i], 'shape')) return { type:'shape', obj: page.shapes[i] };
     }
     for (let i=page.materials.length-1;i>=0;i--) {
       if (hitBody(pos, page.materials[i], 'material')) return { type:'material', obj: page.materials[i] };
@@ -420,11 +523,23 @@ function App() {
     if (t === 'text') {
       // テキストはページの中だけに配置（作業スペースには置かない）
       if (pos.x < 0 || pos.x > PWR.current || pos.y < 0 || pos.y > PHR.current) return;
-      const nt = { id: ntid(), x: pos.x-90, y: pos.y-30, w:180, h:60, text:'', fontSize: FS.current, color: CR.current, lockMove:false, lockSize:false };
+      const nt = { id: ntid(), x: pos.x-90, y: pos.y-30, w:180, h:60, text:'', fontSize: FS.current, color: CR.current, bgColor:null, lockMove:false, lockSize:false };
       setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, textboxes:[...pg.textboxes, nt] }));
       setSelected({ type:'text', obj: nt });
       isNewTextRef.current = true;
-      setEditingId(nt.id); setEditingVal(''); setEditingFontSize(nt.fontSize); setEditingColor(nt.color);
+      setEditingId(nt.id); setEditingVal(''); setEditingFontSize(nt.fontSize); setEditingColor(nt.color); setEditingBgColor(nt.bgColor);
+      return;
+    }
+
+    if (t === 'shape') {
+      const kind = SK.current;
+      const ns = {
+        id: nshid(), shapeType: kind, x: pos.x, y: pos.y, w: 120, h: 120, rotation: 0,
+        fillColor: CR.current, strokeColor: null, strokeWidth: 4, lockMove:false, lockSize:false,
+      };
+      setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, shapes:[...(pg.shapes||[]), ns] }));
+      setSelected({ type:'shape', obj: ns });
+      setTimeout(() => mkThumb(PG.current[PI.current]), 0);
       return;
     }
 
@@ -470,7 +585,7 @@ function App() {
           next.x = clamp(next.x, 0, Math.max(0, PW - next.w));
           next.y = clamp(next.y, 0, Math.max(0, PH - next.h));
         }
-      } else if (SEL.current.type === 'material') {
+      } else if (isCentered(SEL.current.type)) {
         // 中心(x,y)基準なので、左上の角が動かないよう中心も一緒にずらす
         const maxSide = Math.max(PW,PH) * 3;
         const nw = clamp(orig.w + dx, 24, maxSide), nh = clamp(orig.h + dy, 24, maxSide);
@@ -495,7 +610,7 @@ function App() {
       const sel = SEL.current;
       const page = PG.current[PI.current];
       if (sel && page) {
-        const arrKey = sel.type === 'material' ? 'materials' : 'textboxes';
+        const arrKey = arrKeyOf(sel.type);
         setPages(p => p.map((pg,i) => i!==PI.current ? pg : {
           ...pg, [arrKey]: pg[arrKey].map(o => o.id === sel.obj.id ? sel.obj : o)
         }));
@@ -514,16 +629,16 @@ function App() {
      ref経由で読むことで、フリーズされたuseCallback(onDown等)からも安全に呼び出せるようにする */
   const commitEditingText = () => {
     if (EID.current == null) return;
-    const id = EID.current, val = EV.current, fs = EFS.current, col = ECOL.current;
+    const id = EID.current, val = EV.current, fs = EFS.current, col = ECOL.current, bg = EBG.current;
     const page = PG.current[PI.current];
     setPages(p => p.map((pg,i) => i!==PI.current ? pg : {
       ...pg,
       textboxes: val.trim() === ''
         ? pg.textboxes.filter(tb => tb.id !== id)
-        : pg.textboxes.map(tb => tb.id === id ? { ...tb, text: val, fontSize: fs, color: col } : tb)
+        : pg.textboxes.map(tb => tb.id === id ? { ...tb, text: val, fontSize: fs, color: col, bgColor: bg } : tb)
     }));
     if (val.trim() === '') setSelected(null);
-    else setSelected(s => s && s.obj.id === id ? { ...s, obj: { ...s.obj, text: val, fontSize: fs, color: col } } : s);
+    else setSelected(s => s && s.obj.id === id ? { ...s, obj: { ...s.obj, text: val, fontSize: fs, color: col, bgColor: bg } } : s);
     setEditingId(null); setEditingVal('');
     setTimeout(() => { if (page) mkThumb(PG.current[PI.current]); }, 0);
   };
@@ -543,7 +658,7 @@ function App() {
   /* ---------- 選択オブジェクト操作 ---------- */
   const patchSelected = (patch) => {
     const sel = SEL.current; if (!sel) return;
-    const arrKey = sel.type === 'material' ? 'materials' : 'textboxes';
+    const arrKey = arrKeyOf(sel.type);
     const next = { ...sel.obj, ...patch };
     setSelected({ ...sel, obj: next });
     setPages(p => p.map((pg,i) => i!==PI.current ? pg : {
@@ -553,17 +668,16 @@ function App() {
   };
   const deleteSelected = () => {
     const sel = SEL.current; if (!sel) return;
-    const arrKey = sel.type === 'material' ? 'materials' : 'textboxes';
+    const arrKey = arrKeyOf(sel.type);
     setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, [arrKey]: pg[arrKey].filter(o => o.id !== sel.obj.id) }));
     setSelected(null);
     setTimeout(() => mkThumb(PG.current[PI.current]), 0);
   };
   const duplicateSelected = () => {
     const sel = SEL.current; if (!sel) return;
-    const isM = sel.type === 'material';
-    const nid = isM ? nmid() : ntid();
+    const arrKey = arrKeyOf(sel.type);
+    const nid = sel.type==='material' ? nmid() : sel.type==='shape' ? nshid() : ntid();
     const copy = { ...sel.obj, id: nid, x: sel.obj.x + 20, y: sel.obj.y + 20 };
-    const arrKey = isM ? 'materials' : 'textboxes';
     setPages(p => p.map((pg,i) => i!==PI.current ? pg : { ...pg, [arrKey]: [...pg[arrKey], copy] }));
     setSelected({ type: sel.type, obj: copy });
     setTimeout(() => mkThumb(PG.current[PI.current]), 0);
@@ -651,6 +765,7 @@ function App() {
       id: npid(), background: src.background,
       materials: src.materials.map(m => ({ ...m, id: nmid() })),
       textboxes: src.textboxes.map(t => ({ ...t, id: ntid() })),
+      shapes: (src.shapes||[]).map(s => ({ ...s, id: nshid() })),
     };
     src.materials.forEach((m,i) => { matImgs.current[np.materials[i].id] = matImgs.current[m.id]; });
     const srcLayer = penLayers.current[src.id];
@@ -686,6 +801,7 @@ function App() {
         ...pg,
         materials: pg.materials.map(m => ({ ...m, x: m.x*scaleX, y: m.y*scaleY, w: m.w*scaleX, h: m.h*scaleY })),
         textboxes: pg.textboxes.map(t => ({ ...t, x: t.x*scaleX, y: t.y*scaleY, w: t.w*scaleX, h: t.h*scaleY, fontSize: Math.max(8, Math.round(t.fontSize*scaleY)) })),
+        shapes: (pg.shapes||[]).map(s => ({ ...s, x: s.x*scaleX, y: s.y*scaleY, w: s.w*scaleX, h: s.h*scaleY, strokeWidth: s.strokeWidth ? Math.max(1, s.strokeWidth*((scaleX+scaleY)/2)) : s.strokeWidth })),
       };
       const old = penLayers.current[pg.id];
       if (old) {
@@ -709,7 +825,7 @@ function App() {
     version: 2,
     paperW, paperH,
     pages: pages.map(pg => ({
-      id: pg.id, background: pg.background, materials: pg.materials, textboxes: pg.textboxes,
+      id: pg.id, background: pg.background, materials: pg.materials, textboxes: pg.textboxes, shapes: pg.shapes||[],
       strokes: penLayers.current[pg.id] ? penLayers.current[pg.id].toDataURL('image/png') : null,
     })),
   });
@@ -728,11 +844,13 @@ function App() {
     _pid = Math.max(_pid, ...d.pages.map(p=>p.id));
     _mid = Math.max(_mid, 0, ...d.pages.flatMap(p=>p.materials.map(m=>m.id)));
     _tid = Math.max(_tid, 0, ...d.pages.flatMap(p=>p.textboxes.map(t=>t.id)));
+    _shid = Math.max(_shid, 0, ...d.pages.flatMap(p=>(p.shapes||[]).map(s=>s.id)));
     const newPages = d.pages.map(p => ({
       id:p.id, background:p.background,
       // 旧バージョン(locked単一フラグ)からの移行
       materials: p.materials.map(m => m.lockMove!==undefined ? m : { ...m, lockMove: !!m.locked, lockSize: !!m.locked }),
       textboxes: p.textboxes.map(t => t.lockMove!==undefined ? t : { ...t, lockMove: !!t.locked, lockSize: !!t.locked }),
+      shapes: (p.shapes||[]).map(s => s.lockMove!==undefined ? s : { ...s, lockMove: !!s.locked, lockSize: !!s.locked }),
     }));
     return Promise.all(d.pages.map(p => new Promise(res => {
       p.materials.forEach(m => { if (!matImgs.current[m.id]) { const im=new Image(); im.src=m.dataURL; matImgs.current[m.id]=im; } });
@@ -755,6 +873,30 @@ function App() {
       rd.readAsText(file);
     };
     inp.click();
+  };
+
+  /* ---------- 自動保存の復元・消去 ----------
+     起動時に一度だけ、このブラウザに残っている自動保存データがあれば読み込む。
+     手動保存(💾)とは別物で、キャッシュ削除や別端末・別ブラウザでは引き継がれない点に注意。 */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AUTOSAVE_KEY);
+      if (!raw) { restoreDoneRef.current = true; return; }
+      const data = JSON.parse(raw);
+      loadFromData(data).then(() => {
+        restoreDoneRef.current = true;
+        setStatus('✓ 前回のつづきを読み込みました（このブラウザに自動保存されていたデータ）');
+      });
+    } catch (e) {
+      console.warn('自動保存の読み込みに失敗しました', e);
+      restoreDoneRef.current = true;
+    }
+  }, []);
+
+  const clearAutosave = () => {
+    if (!window.confirm('このブラウザに自動保存された内容を消去します。よろしいですか？\n（今開いている内容はそのまま残ります。💾保存したファイルも消えません）')) return;
+    try { localStorage.removeItem(AUTOSAVE_KEY); setStatus('✓ 自動保存を消去しました'); }
+    catch { setStatus('✗ 消去に失敗しました'); }
   };
 
   const copyClipboard = async () => {
@@ -845,6 +987,7 @@ function App() {
         <button className="abtn" onClick={pasteClipboard}>📥 貼付</button>
         <button className="abtn hi" onClick={downloadImage}>🖼 画像</button>
         <button className="abtn hi" onClick={downloadPDF}>📕 PDF</button>
+        <button className="abtn" onClick={clearAutosave} title="このブラウザに残っている自動保存データを消去します">🧹 自動保存を消去</button>
         <span className="status">{status}</span>
       </header>
 
@@ -854,6 +997,15 @@ function App() {
           <button className={"tbtn"+(tool==='pen'?' active':'')} title="ペン" onClick={()=>setTool('pen')}>✏️</button>
           <button className={"tbtn"+(tool==='eraser'?' active':'')} title="消しゴム" onClick={()=>setTool('eraser')}>🧽</button>
           <button className={"tbtn"+(tool==='text'?' active':'')} title="テキスト追加" onClick={()=>setTool('text')}>🔤</button>
+          <button className={"tbtn"+(tool==='shape'?' active':'')} title="図形を追加" onClick={()=>setTool('shape')}>⬛</button>
+          {tool==='shape' && (
+            <div style={{display:'flex',flexWrap:'wrap',gap:3,width:60,justifyContent:'center'}}>
+              {SHAPE_KINDS.map(k => (
+                <button key={k.id} className={"tbtn"+(shapeKind===k.id?' active':'')} style={{width:26,height:26,fontSize:13}}
+                  title={k.label} onClick={()=>setShapeKind(k.id)}>{k.icon}</button>
+              ))}
+            </div>
+          )}
           <div className="sep"></div>
           <div className="swatches">
             {PALETTE.map(c => (
@@ -885,7 +1037,7 @@ function App() {
               const scale = dispSize.w / stageW;
               return (
                 <textarea autoFocus className="text-editor"
-                  style={{ left:((MARGIN+tb.x)/stageW*100)+'%', top:((MARGIN+tb.y)/stageH*100)+'%', width:(tb.w/stageW*100)+'%', height:(tb.h/stageH*100)+'%', fontSize:(editingFontSize*scale)+'px', color: editingColor }}
+                  style={{ left:((MARGIN+tb.x)/stageW*100)+'%', top:((MARGIN+tb.y)/stageH*100)+'%', width:(tb.w/stageW*100)+'%', height:(tb.h/stageH*100)+'%', fontSize:(editingFontSize*scale)+'px', color: editingColor, backgroundColor: editingBgColor || 'rgba(255,255,255,0.92)' }}
                   value={editingVal} onChange={e=>setEditingVal(e.target.value)} />
               );
             })()}
@@ -893,7 +1045,7 @@ function App() {
               const o = sel.obj;
               const stageW = paperW+MARGIN*2, stageH = paperH+MARGIN*2;
               let x1,y1,w,h;
-              if (sel.type==='material') { x1=o.x-o.w/2; y1=o.y-o.h/2; w=o.w; h=o.h; }
+              if (isCentered(sel.type)) { x1=o.x-o.w/2; y1=o.y-o.h/2; w=o.w; h=o.h; }
               else { x1=o.x; y1=o.y; w=o.w; h=o.h; }
               const leftPct = (MARGIN+x1)/stageW*100, topPct = (MARGIN+y1)/stageH*100;
               const wPct = w/stageW*100, hPct = h/stageH*100;
@@ -908,7 +1060,7 @@ function App() {
                     <button className="float-btn" title="コピー"
                       style={{ left:(leftPct+wPct)+'%', top:topPct+'%' }} onClick={duplicateSelected}>⊕</button>
                   )}
-                  {sel.type==='material' && !o.lockMove && (<>
+                  {isCentered(sel.type) && !o.lockMove && (<>
                     <button className="float-btn rotate" title="左に回転"
                       style={{ left:`calc(${leftPct+wPct/2}% - 20px)`, top:`calc(${topPct}% - 26px)` }}
                       onClick={()=>patchSelected({rotation:(o.rotation||0)-15})}>↺</button>
@@ -923,11 +1075,14 @@ function App() {
 
           {editingId!=null && (
             <div className="obj-panel">
+              <span className="small-lbl">もじいろ</span>
               <div className="swatches">
                 {PALETTE.map(c => (
                   <button key={c} className={"swatch"+(editingColor===c?' sel':'')} style={{background:c}} onClick={()=>setEditingColor(c)} />
                 ))}
               </div>
+              <span className="small-lbl">はいけい</span>
+              <ColorSwatches value={editingBgColor} onChange={setEditingBgColor} palette={TEXT_BG_PALETTE} allowNone />
               <span className="small-lbl">おおきさ</span>
               <input type="range" min={12} max={120} value={editingFontSize} onChange={e=>setEditingFontSize(+e.target.value)} style={{width:70}} />
               <span style={{fontSize:11,color:'#889'}}>{editingFontSize}px</span>
@@ -944,8 +1099,17 @@ function App() {
                 <button className="abtn" onClick={()=>patchSelected({lockMove:!o.lockMove})}>{o.lockMove?'📌 移動ロック解除':'📌 移動ロックする'}</button>
                 <button className="abtn" onClick={()=>patchSelected({lockSize:!o.lockSize})}>{o.lockSize?'📐 サイズロック解除':'📐 サイズロックする'}</button>
                 {sel.type==='text' && editable && (
-                  <button className="abtn" onClick={()=>{ isNewTextRef.current=false; setEditingId(o.id); setEditingVal(o.text||''); setEditingFontSize(o.fontSize||30); setEditingColor(o.color||'#000000'); }}>✏️ 文字を編集</button>
+                  <button className="abtn" onClick={()=>{ isNewTextRef.current=false; setEditingId(o.id); setEditingVal(o.text||''); setEditingFontSize(o.fontSize||30); setEditingColor(o.color||'#000000'); setEditingBgColor(o.bgColor||null); }}>✏️ 文字を編集</button>
                 )}
+                {sel.type==='shape' && editable && (<>
+                  <span className="small-lbl">ぬり</span>
+                  <ColorSwatches value={o.fillColor||null} onChange={c=>patchSelected({fillColor:c})} palette={PALETTE} allowNone />
+                  <span className="small-lbl">わく</span>
+                  <ColorSwatches value={o.strokeColor||null} onChange={c=>patchSelected({strokeColor:c})} palette={PALETTE} allowNone />
+                  {o.strokeColor && (
+                    <input type="range" min={1} max={20} value={o.strokeWidth||4} onChange={e=>patchSelected({strokeWidth:+e.target.value})} style={{width:56}} title="わくの太さ" />
+                  )}
+                </>)}
               </div>
             );
           })()}
