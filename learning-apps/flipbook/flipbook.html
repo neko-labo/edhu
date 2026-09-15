@@ -45,6 +45,19 @@ function normRect(x1, y1, x2, y2) {
   return { x: Math.min(x1,x2), y: Math.min(y1,y2), w: Math.abs(x2-x1), h: Math.abs(y2-y1) };
 }
 
+function drawMatObj(ctx, obj, materials, imgCacheObj) {
+  const mat = materials.find(m => m.id === obj.materialId);
+  if (!mat) return;
+  const img = imgCacheObj[obj.materialId];
+  if (!img || !img.complete) return;
+  const sc = obj.scale || 1;
+  ctx.save();
+  ctx.translate(obj.x, obj.y);
+  ctx.rotate((obj.rotation || 0) * Math.PI / 180);
+  ctx.drawImage(img, -mat.w*sc/2, -mat.h*sc/2, mat.w*sc, mat.h*sc);
+  ctx.restore();
+}
+
 const HANDLE_R = 12, HANDLE_DIST = 26, HANDLE_HIT = 17;
 function drawHandle(ctx, x, y, color, label) {
   ctx.save();
@@ -108,13 +121,16 @@ function App() {
   const selStart = useRef(null);
   const dragMode = useRef(null); // 'move' | 'rotate' | 'scale'
   const scaleStart = useRef(null); // { dist, scale }
-  const undoStacks = useRef({});
+  const undoStack = useRef([]); // unified: {type:'stroke', frameId, layerId, imageData} | {type:'objects', frameId, objects}
+  const MAX_UNDO = 30;
   const pushUndo = (frameId, layerId) => {
-    const key = `${frameId}_${layerId}`;
     const snap = glc(frameId, layerId).getContext('2d').getImageData(0, 0, CW, CH);
-    if (!undoStacks.current[key]) undoStacks.current[key] = [];
-    undoStacks.current[key].push(snap);
-    if (undoStacks.current[key].length > 25) undoStacks.current[key].shift();
+    undoStack.current.push({ type: 'stroke', frameId, layerId, imageData: snap });
+    if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+  };
+  const pushObjUndo = (frameId, objects) => {
+    undoStack.current.push({ type: 'objects', frameId, objects: JSON.parse(JSON.stringify(objects || [])) });
+    if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
   };
   const pt = useRef(null);
   const imgCache = useRef({});
@@ -178,46 +194,27 @@ function App() {
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, CW, CH);
     if (wo && prev) {
       ctx.globalAlpha = 0.25;
+      const prevObjs = prev.objects || [];
       prev.layers.forEach(l => {
         if (!l.visible) return;
         const c = lcs.current[`${prev.id}_${l.id}`]; if (c) ctx.drawImage(c, 0, 0);
+        prevObjs.forEach(obj => { if (obj.layerId === l.id) drawMatObj(ctx, obj, materials, imgCache.current); });
       });
-      if (prev.objects && prev.objects.length > 0) {
-        prev.objects.forEach(obj => {
-          const mat = materials.find(m => m.id === obj.materialId);
-          if (!mat) return;
-          const img = imgCache.current[mat.id];
-          if (!img || !img.complete) return;
-          const sc = obj.scale || 1;
-          ctx.save();
-          ctx.translate(obj.x, obj.y);
-          ctx.rotate((obj.rotation || 0) * Math.PI / 180);
-          ctx.drawImage(img, -mat.w*sc/2, -mat.h*sc/2, mat.w*sc, mat.h*sc);
-          ctx.restore();
-        });
-      }
+      prevObjs.forEach(obj => {
+        if (!prev.layers.some(l => l.id === obj.layerId)) drawMatObj(ctx, obj, materials, imgCache.current);
+      });
       ctx.globalAlpha = 1;
     }
+    const objs = frame.objects || [];
     frame.layers.forEach(l => {
       if (!l.visible) return;
       const c = lcs.current[`${frame.id}_${l.id}`]; if (c) ctx.drawImage(c, 0, 0);
+      objs.forEach(obj => { if (obj.layerId === l.id) drawMatObj(ctx, obj, materials, imgCache.current); });
     });
-    
-    // Draw material objects
-    if (frame.objects && frame.objects.length > 0) {
-      frame.objects.forEach(obj => {
-        const mat = materials.find(m => m.id === obj.materialId);
-        if (!mat) return;
-        const img = imgCache.current[mat.id];
-        if (!img || !img.complete) return;
-        const sc = obj.scale || 1;
-        ctx.save();
-        ctx.translate(obj.x, obj.y);
-        ctx.rotate((obj.rotation || 0) * Math.PI / 180);
-        ctx.drawImage(img, -mat.w*sc/2, -mat.h*sc/2, mat.w*sc, mat.h*sc);
-        ctx.restore();
-      });
-    }
+    // objects with no matching layer (e.g. loaded from an older save) draw on top
+    objs.forEach(obj => {
+      if (!frame.layers.some(l => l.id === obj.layerId)) drawMatObj(ctx, obj, materials, imgCache.current);
+    });
   }, [materials]);
 
   const rerender = useCallback(() => {
@@ -319,14 +316,17 @@ function App() {
   }, [tool]);
 
   const doUndo = useCallback(() => {
-    const frame = FR.current[FI.current]; if (!frame) return;
-    const layer = frame.layers[LI.current]; if (!layer) return;
-    const k = `${frame.id}_${layer.id}`;
-    const stack = undoStacks.current[k];
-    if (!stack || stack.length === 0) return;
-    const snap = stack.pop();
-    glc(frame.id, layer.id).getContext('2d').putImageData(snap, 0, 0);
-    rerender(); mkThumb(frame);
+    const entry = undoStack.current.pop();
+    if (!entry) return;
+    if (entry.type === 'stroke') {
+      glc(entry.frameId, entry.layerId).getContext('2d').putImageData(entry.imageData, 0, 0);
+      rerender();
+      const frame = FR.current.find(f => f.id === entry.frameId);
+      if (frame) mkThumb(frame);
+    } else if (entry.type === 'objects') {
+      setFrames(p => p.map(f => f.id !== entry.frameId ? f : { ...f, objects: entry.objects }));
+      setSelObj(null);
+    }
   }, [glc, rerender, mkThumb]);
 
   useEffect(() => {
@@ -390,11 +390,13 @@ function App() {
           const near = (ax, ay) => Math.hypot(loc.x - ax, loc.y - ay) < HANDLE_HIT;
 
           if (near(0, -hh - HANDLE_DIST)) {
+            pushObjUndo(frame.id, frame.objects);
             dragMode.current = 'rotate';
             drg.current = true; lxy.current = pos;
             return;
           }
           if (near(hw, hh)) {
+            pushObjUndo(frame.id, frame.objects);
             dragMode.current = 'scale';
             drg.current = true; lxy.current = pos;
             scaleStart.current = { dist: Math.hypot(pos.x - obj.x, pos.y - obj.y), scale: sc };
@@ -402,6 +404,7 @@ function App() {
           }
           if (near(hw, -hh)) {
             const curFrame = FR.current[FI.current];
+            pushObjUndo(curFrame.id, curFrame.objects);
             setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: f.objects.filter(o => o.id !== obj.id) }));
             setSelObj(null);
             rerender(); if (curFrame) mkThumb(curFrame);
@@ -411,6 +414,7 @@ function App() {
           if (near(-hw, -hh)) {
             const newObj = { ...obj, id: noid(), x: obj.x + 14, y: obj.y + 14 };
             const curFrame = FR.current[FI.current];
+            pushObjUndo(curFrame.id, curFrame.objects);
             setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: [...f.objects, newObj] }));
             setSelObj(newObj);
             rerender(); if (curFrame) mkThumb(curFrame);
@@ -421,14 +425,19 @@ function App() {
       }
 
       if (frame && frame.objects && frame.objects.length > 0) {
-        for (let i = frame.objects.length - 1; i >= 0; i--) {
-          const obj = frame.objects[i];
+        const objs = frame.objects;
+        const orphaned = objs.filter(o => !frame.layers.some(l => l.id === o.layerId)).slice().reverse();
+        const byLayerTopFirst = [...frame.layers].slice().reverse()
+          .flatMap(l => objs.filter(o => o.layerId === l.id).slice().reverse());
+        const hitOrder = [...orphaned, ...byLayerTopFirst];
+        for (const obj of hitOrder) {
           const mat = materials.find(m => m.id === obj.materialId);
           if (!mat) continue;
           const sc = obj.scale || 1;
           const dx = pos.x - obj.x;
           const dy = pos.y - obj.y;
           if (Math.abs(dx) < mat.w*sc/2 && Math.abs(dy) < mat.h*sc/2) {
+            pushObjUndo(frame.id, frame.objects);
             setSelObj(obj);
             dragMode.current = 'move';
             drg.current = true;
@@ -448,17 +457,20 @@ function App() {
     if (t === 'stamp') {
       const mat = SM.current; if (!mat) return;
       const frame = FR.current[FI.current]; if (!frame) return;
+      const curLayer = frame.layers[LI.current] || frame.layers[0];
       const newObj = {
         id: noid(),
         materialId: mat.id,
         x: pos.x,
         y: pos.y,
         rotation: 0,
-        scale: 1
+        scale: 1,
+        layerId: curLayer ? curLayer.id : null
       };
+      pushObjUndo(frame.id, frame.objects);
       setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: [...(f.objects || []), newObj] }));
       rerender(); mkThumb(frame);
-      setStatus("✓ 素材を配置しました");
+      setStatus("✓「" + mat.name + "」を" + (curLayer ? curLayer.name : '') + "に配置しました");
       return;
     }
 
@@ -588,7 +600,15 @@ function App() {
   const addFrame = () => { const f = mkFrame(); setFrames(p => { const n=[...p]; n.splice(fi+1,0,f); return n; }); setFi(fi+1); setLi(0); };
   const copyFrame = () => {
     const src = frames[fi];
-    const nf = { id: nfid(), layers: src.layers.map(l => ({ ...l, id: nlid() })), objects: JSON.parse(JSON.stringify(src.objects || [])) };
+    const newLayers = src.layers.map(l => ({ ...l, id: nlid() }));
+    const layerIdMap = {};
+    src.layers.forEach((l, i) => { layerIdMap[l.id] = newLayers[i].id; });
+    const newObjects = JSON.parse(JSON.stringify(src.objects || [])).map(o => ({
+      ...o,
+      id: noid(),
+      layerId: Object.prototype.hasOwnProperty.call(layerIdMap, o.layerId) ? layerIdMap[o.layerId] : o.layerId
+    }));
+    const nf = { id: nfid(), layers: newLayers, objects: newObjects };
     src.layers.forEach((l, i) => {
       const sc = lcs.current[`${src.id}_${l.id}`];
       const dc = document.createElement('canvas'); dc.width=CW; dc.height=CH;
@@ -601,7 +621,20 @@ function App() {
   const mvFrame = dir => { const ni=fi+dir; if(ni<0||ni>=frames.length)return; setFrames(p=>{const n=[...p];[n[fi],n[ni]]=[n[ni],n[fi]];return n;}); setFi(ni); };
 
   const addLayer = () => { const nl=mkLayer(`レイヤー${frames[fi].layers.length+1}`); setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:[...f.layers,nl]})); setLi(frames[fi].layers.length); };
-  const delLayer = () => { if(frames[fi].layers.length<=1)return; setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:f.layers.filter((_,j)=>j!==li)})); setLi(Math.max(0,li-1)); };
+  const delLayer = () => {
+    if (frames[fi].layers.length <= 1) return;
+    const layers = frames[fi].layers;
+    const removedId = layers[li].id;
+    const remaining = layers.filter((_, j) => j !== li);
+    const newLi = Math.max(0, li - 1);
+    setFrames(p => p.map((f, i) => i !== fi ? f : {
+      ...f,
+      layers: remaining,
+      objects: (f.objects || []).filter(o => o.layerId !== removedId)
+    }));
+    if (selObj && selObj.layerId === removedId) setSelObj(null);
+    setLi(newLi);
+  };
   const togLayer = idx => setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:f.layers.map((l,j)=>j!==idx?l:{...l,visible:!l.visible})}));
   const cpLayer = () => {
     const sl=frames[fi].layers[li]; if(!sl) return;
