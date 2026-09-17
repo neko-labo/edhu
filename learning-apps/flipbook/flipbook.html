@@ -121,7 +121,7 @@ function App() {
   const selStart = useRef(null);
   const dragMode = useRef(null); // 'move' | 'rotate' | 'scale'
   const scaleStart = useRef(null); // { dist, scale }
-  const undoStack = useRef([]); // unified: {type:'stroke', frameId, layerId, imageData} | {type:'objects', frameId, objects}
+  const undoStack = useRef([]); // unified: {type:'stroke', frameId, layerId, imageData} | {type:'objects', frameId, objects} | {type:'frames', frames, fi, li}
   const MAX_UNDO = 30;
   const pushUndo = (frameId, layerId) => {
     const snap = glc(frameId, layerId).getContext('2d').getImageData(0, 0, CW, CH);
@@ -130,6 +130,15 @@ function App() {
   };
   const pushObjUndo = (frameId, objects) => {
     undoStack.current.push({ type: 'objects', frameId, objects: JSON.parse(JSON.stringify(objects || [])) });
+    if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+  };
+  const pushFramesUndo = () => {
+    undoStack.current.push({
+      type: 'frames',
+      frames: JSON.parse(JSON.stringify(FR.current)),
+      fi: FI.current,
+      li: LI.current
+    });
     if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
   };
   const pt = useRef(null);
@@ -413,6 +422,14 @@ function App() {
     } else if (entry.type === 'objects') {
       setFrames(p => p.map(f => f.id !== entry.frameId ? f : { ...f, objects: entry.objects }));
       setSelObj(null);
+    } else if (entry.type === 'frames') {
+      const restored = entry.frames;
+      const nfi = Math.min(entry.fi, restored.length - 1);
+      const layerCount = (restored[nfi] && restored[nfi].layers.length) || 1;
+      setFrames(restored);
+      setFi(nfi);
+      setLi(Math.min(entry.li, layerCount - 1));
+      setSelObj(null);
     }
   }, [glc, rerender, mkThumb]);
 
@@ -684,8 +701,9 @@ function App() {
     return () => clearInterval(pt.current);
   }, [playing, fps, comp, rerender]);
 
-  const addFrame = () => { const f = mkFrame(); setFrames(p => { const n=[...p]; n.splice(fi+1,0,f); return n; }); setFi(fi+1); setLi(0); };
+  const addFrame = () => { pushFramesUndo(); const f = mkFrame(); setFrames(p => { const n=[...p]; n.splice(fi+1,0,f); return n; }); setFi(fi+1); setLi(0); };
   const copyFrame = () => {
+    pushFramesUndo();
     const src = frames[fi];
     const newLayers = src.layers.map(l => ({ ...l, id: nlid() }));
     const layerIdMap = {};
@@ -704,12 +722,13 @@ function App() {
     });
     setFrames(p => { const n=[...p]; n.splice(fi+1,0,nf); return n; }); setFi(fi+1); setLi(0);
   };
-  const delFrame = () => { if (frames.length<=1) return; setFrames(p=>p.filter((_,i)=>i!==fi)); setFi(Math.max(0,fi-1)); setLi(0); };
-  const mvFrame = dir => { const ni=fi+dir; if(ni<0||ni>=frames.length)return; setFrames(p=>{const n=[...p];[n[fi],n[ni]]=[n[ni],n[fi]];return n;}); setFi(ni); };
+  const delFrame = () => { if (frames.length<=1) return; pushFramesUndo(); setFrames(p=>p.filter((_,i)=>i!==fi)); setFi(Math.max(0,fi-1)); setLi(0); };
+  const mvFrame = dir => { const ni=fi+dir; if(ni<0||ni>=frames.length)return; pushFramesUndo(); setFrames(p=>{const n=[...p];[n[fi],n[ni]]=[n[ni],n[fi]];return n;}); setFi(ni); };
 
-  const addLayer = () => { const nl=mkLayer(`レイヤー${frames[fi].layers.length+1}`); setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:[...f.layers,nl]})); setLi(frames[fi].layers.length); };
+  const addLayer = () => { pushFramesUndo(); const nl=mkLayer(`レイヤー${frames[fi].layers.length+1}`); setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:[...f.layers,nl]})); setLi(frames[fi].layers.length); };
   const delLayer = () => {
     if (frames[fi].layers.length <= 1) return;
+    pushFramesUndo();
     const layers = frames[fi].layers;
     const removedId = layers[li].id;
     const remaining = layers.filter((_, j) => j !== li);
@@ -722,10 +741,11 @@ function App() {
     if (selObj && selObj.layerId === removedId) setSelObj(null);
     setLi(newLi);
   };
-  const togLayer = idx => setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:f.layers.map((l,j)=>j!==idx?l:{...l,visible:!l.visible})}));
+  const togLayer = idx => { pushFramesUndo(); setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:f.layers.map((l,j)=>j!==idx?l:{...l,visible:!l.visible})})); };
   const mvLayer = dir => {
     const ni = li + dir;
     if (ni < 0 || ni >= frames[fi].layers.length) return;
+    pushFramesUndo();
     setFrames(p => p.map((f, i) => {
       if (i !== fi) return f;
       const n = [...f.layers];
@@ -736,6 +756,7 @@ function App() {
   };
   const cpLayer = () => {
     const sl=frames[fi].layers[li]; if(!sl) return;
+    pushFramesUndo();
     const nl={id:nlid(),name:sl.name+"_コピー",visible:true};
     const dc=document.createElement('canvas'); dc.width=CW; dc.height=CH;
     const sc=lcs.current[`${frames[fi].id}_${sl.id}`]; if(sc) dc.getContext('2d').drawImage(sc,0,0);
