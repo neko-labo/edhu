@@ -163,6 +163,7 @@ function App() {
   const SM = useRef(stampMat); useEffect(() => { SM.current = stampMat; }, [stampMat]);
   const SEL = useRef(selRect); useEffect(() => { SEL.current = selRect; }, [selRect]);
   const SOB = useRef(selObj); useEffect(() => { SOB.current = selObj; }, [selObj]);
+  const FPSR = useRef(fps); useEffect(() => { FPSR.current = fps; }, [fps]);
 
   useEffect(() => {
     const s = document.createElement('script');
@@ -224,11 +225,97 @@ function App() {
     comp(frame, cvs.current.getContext('2d'), OR.current, prev);
   }, [comp]);
 
+  const AUTOSAVE_KEY = 'flipbook_autosave_v1';
+  const restoringRef = useRef(true);
+  const autosaveTimer = useRef(null);
+
+  const doAutosave = useCallback(() => {
+    if (restoringRef.current) return;
+    try {
+      const data = {
+        version: 3,
+        fps: FPSR.current,
+        frames: FR.current.map(f => ({
+          id: f.id,
+          objects: f.objects || [],
+          layers: f.layers.map(l => {
+            const c = lcs.current[`${f.id}_${l.id}`];
+            return { id: l.id, name: l.name, visible: l.visible, data: c ? c.toDataURL('image/png') : null };
+          })
+        })),
+        materials
+      };
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
+    } catch (e) {
+      setStatus("⚠ 自動保存に失敗しました（データが大きすぎるかも）");
+    }
+  }, [materials]);
+
+  const scheduleAutosave = useCallback(() => {
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(doAutosave, 800);
+  }, [doAutosave]);
+
+  const clearAutosave = () => {
+    try { localStorage.removeItem(AUTOSAVE_KEY); } catch (e) {}
+    setStatus("🧹 自動保存を消去しました");
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const raw = localStorage.getItem(AUTOSAVE_KEY);
+      if (!raw) { restoringRef.current = false; return; }
+      const d = JSON.parse(raw);
+      if (!d || !d.frames || !d.frames.length) { restoringRef.current = false; return; }
+
+      const lf = d.frames.map(f => ({
+        id: f.id,
+        layers: f.layers.map(l => ({ id: l.id, name: l.name, visible: l.visible })),
+        objects: f.objects || []
+      }));
+      _fid = Math.max(_fid, ...d.frames.map(f => f.id));
+      _lid = Math.max(_lid, ...d.frames.flatMap(f => f.layers.map(l => l.id)));
+      const objIds = d.frames.flatMap(f => (f.objects || []).map(o => o.id));
+      if (objIds.length) _oid = Math.max(_oid, ...objIds);
+      if (d.materials && d.materials.length) _mid = Math.max(_mid, ...d.materials.map(m => m.id));
+
+      Promise.all(d.frames.flatMap(f => f.layers.map(l => new Promise(res => {
+        if (!l.data) { res(); return; }
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas'); c.width = CW; c.height = CH;
+          c.getContext('2d').drawImage(img, 0, 0);
+          lcs.current[`${f.id}_${l.id}`] = c;
+          res();
+        };
+        img.onerror = res;
+        img.src = l.data;
+      })))).then(() => {
+        if (cancelled) return;
+        setFps(d.fps || 8);
+        setFrames(lf); setFi(0); setLi(0);
+        if (d.materials && d.materials.length) {
+          d.materials.forEach(m => { const im = new Image(); im.src = m.dataURL; imgCache.current[m.id] = im; });
+          setMaterials(d.materials);
+        }
+        setStatus("✓ 前回のデータを復元しました");
+        restoringRef.current = false;
+      }).catch(() => { restoringRef.current = false; });
+    } catch (e) {
+      restoringRef.current = false;
+    }
+    return () => { cancelled = true; };
+  }, []);
+
   const mkThumb = useCallback((frame) => {
     const tc = document.createElement('canvas'); tc.width = CW; tc.height = CH;
     comp(frame, tc.getContext('2d'), false, null);
     setThumbs(p => ({ ...p, [frame.id]: tc.toDataURL('image/png', 0.4) }));
-  }, [comp]);
+    scheduleAutosave();
+  }, [comp, scheduleAutosave]);
+
+  useEffect(() => { scheduleAutosave(); }, [materials, fps, scheduleAutosave]);
 
   useEffect(() => { rerender(); }, [fi, li, frames, onion, rerender]);
   useEffect(() => { if (frames[fi]) mkThumb(frames[fi]); }, [fi, frames, mkThumb]);
@@ -636,6 +723,17 @@ function App() {
     setLi(newLi);
   };
   const togLayer = idx => setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:f.layers.map((l,j)=>j!==idx?l:{...l,visible:!l.visible})}));
+  const mvLayer = dir => {
+    const ni = li + dir;
+    if (ni < 0 || ni >= frames[fi].layers.length) return;
+    setFrames(p => p.map((f, i) => {
+      if (i !== fi) return f;
+      const n = [...f.layers];
+      [n[li], n[ni]] = [n[ni], n[li]];
+      return { ...f, layers: n };
+    }));
+    setLi(ni);
+  };
   const cpLayer = () => {
     const sl=frames[fi].layers[li]; if(!sl) return;
     const nl={id:nlid(),name:sl.name+"_コピー",visible:true};
@@ -804,6 +902,7 @@ function App() {
         <span style={{ fontSize:14, fontWeight:800, color:'#ff6b9d', marginRight:4 }}>🎬 パラパラ漫画</span>
         <Btn onClick={save}>💾 保存</Btn>
         <Btn onClick={load}>📂 開く</Btn>
+        <Btn onClick={clearAutosave}>🧹 自動保存を消去</Btn>
         <Sep />
         <Btn onClick={() => setPlaying(p => !p)} hi={playing}>{playing ? '⏹ 停止' : '▶ 再生'}</Btn>
         <label style={{ fontSize:11, color:'#667' }}>fps</label>
@@ -880,6 +979,10 @@ function App() {
               <SB onClick={addLayer} title="追加">＋</SB>
               <SB onClick={cpLayer} title="コピー">⊕</SB>
               <SB onClick={delLayer} disabled={layers.length <= 1} title="削除">−</SB>
+            </div>
+            <div style={{ display:'flex', gap:2, marginTop:2 }}>
+              <SB onClick={() => mvLayer(1)} disabled={li >= layers.length - 1} title="前面へ（上のレイヤーと入れ替え）">▲ 前面</SB>
+              <SB onClick={() => mvLayer(-1)} disabled={li <= 0} title="背面へ（下のレイヤーと入れ替え）">▼ 背面</SB>
             </div>
           </div>
           <div style={{ flex:1, overflowY:'auto' }}>
