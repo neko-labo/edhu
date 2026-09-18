@@ -725,6 +725,80 @@ function App() {
   const delFrame = () => { if (frames.length<=1) return; pushFramesUndo(); setFrames(p=>p.filter((_,i)=>i!==fi)); setFi(Math.max(0,fi-1)); setLi(0); };
   const mvFrame = dir => { const ni=fi+dir; if(ni<0||ni>=frames.length)return; pushFramesUndo(); setFrames(p=>{const n=[...p];[n[fi],n[ni]]=[n[ni],n[fi]];return n;}); setFi(ni); };
 
+  const frameDrag = useRef(null); // { startX, startY, curIdx, moved, pointerId }
+  const justDraggedFrame = useRef(false);
+  const frameSlotEls = useRef({}); // index -> DOM node, refreshed on every render
+  const [dragFrameIdx, setDragFrameIdx] = useState(null);
+  const DRAG_THRESHOLD = 8;
+
+  const onFramePointerDown = (e, i) => {
+    if (playing) return;
+    frameDrag.current = { startX: e.clientX, startY: e.clientY, curIdx: i, moved: false, pointerId: e.pointerId };
+    setDragFrameIdx(i);
+    setStatus("✋ " + (i + 1) + "枚目をつかみました。ずらすと並び替わります");
+  };
+
+  // Window-level listeners (not tied to the handle element) so the drag keeps
+  // working regardless of re-renders, pointer capture quirks, or the cursor
+  // moving over other elements.
+  useEffect(() => {
+    const handleMove = e => {
+      const d = frameDrag.current; if (!d) return;
+      try {
+        if (!d.moved) {
+          if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < DRAG_THRESHOLD) return;
+          d.moved = true;
+          pushFramesUndo();
+        }
+        let overIdx = null;
+        const entries = Object.entries(frameSlotEls.current);
+        for (let k = 0; k < entries.length; k++) {
+          const [idxStr, node] = entries[k];
+          if (!node) continue;
+          const r = node.getBoundingClientRect();
+          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+            overIdx = parseInt(idxStr, 10);
+            break;
+          }
+        }
+        if (overIdx === null || Number.isNaN(overIdx) || overIdx === d.curIdx) return;
+        setFrames(p => {
+          const n = [...p];
+          const [moved] = n.splice(d.curIdx, 1);
+          n.splice(overIdx, 0, moved);
+          return n;
+        });
+        if (FI.current === d.curIdx) setFi(overIdx);
+        d.curIdx = overIdx;
+        setDragFrameIdx(overIdx);
+        setStatus("↔ " + (overIdx + 1) + "番目に移動中…");
+      } catch (err) {
+        setStatus("✗ ドラッグ中にエラー: " + err.message);
+      }
+    };
+    const handleUp = () => {
+      const d = frameDrag.current;
+      if (!d) return;
+      frameDrag.current = null;
+      setDragFrameIdx(null);
+      if (d.moved) {
+        justDraggedFrame.current = true;
+        setTimeout(() => { justDraggedFrame.current = false; }, 50);
+        setStatus("✓ 並び替えました");
+      } else {
+        setStatus("準備完了");
+      }
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+    };
+  }, []);
+
   const addLayer = () => { pushFramesUndo(); const nl=mkLayer(`レイヤー${frames[fi].layers.length+1}`); setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:[...f.layers,nl]})); setLi(frames[fi].layers.length); };
   const delLayer = () => {
     if (frames[fi].layers.length <= 1) return;
@@ -1045,13 +1119,18 @@ function App() {
             </div>
             <div style={{ width:1, height:80, background:'rgba(0,0,0,0.1)', flexShrink:0, marginRight:2 }} />
             {frames.map((f, i) => (
-              <div key={f.id} onClick={() => { if (!playing) { setFi(i); setLi(0); } }}
-                style={{ width:TW, flexShrink:0, cursor:'pointer', border:i===fi?'2px solid #ff6b9d':'2px solid #ddd', borderRadius:4, overflow:'hidden', background:'#f5f5f8', position:'relative', boxShadow:'0 2px 4px rgba(0,0,0,0.08)' }}>
+              <div key={f.id} data-frame-index={i}
+                ref={node => { frameSlotEls.current[i] = node; }}
+                onClick={() => { if (!playing && !justDraggedFrame.current) { setFi(i); setLi(0); } }}
+                style={{ width:TW, flexShrink:0, cursor:'pointer', opacity:dragFrameIdx===i?0.55:1, transform:dragFrameIdx===i?'scale(1.08)':'none', transition:'transform 0.12s, opacity 0.12s, box-shadow 0.12s', border:dragFrameIdx===i?'2px solid #5ba8ff':(i===fi?'2px solid #ff6b9d':'2px solid #ddd'), borderRadius:4, overflow:'hidden', background:'#f5f5f8', position:'relative', boxShadow:dragFrameIdx===i?'0 4px 14px rgba(91,168,255,0.55)':'0 2px 4px rgba(0,0,0,0.08)' }}>
                 <div style={{ height:TH, overflow:'hidden', background:'#f5f5f8' }}>
-                  {thumbs[f.id] && <img src={thumbs[f.id]} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />}
+                  {thumbs[f.id] && <img src={thumbs[f.id]} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} draggable={false} />}
                 </div>
-                <div style={{ background:i===fi?'#ff6b9d':'white', color:i===fi?'white':'#333', textAlign:'center', fontSize:9, fontWeight:700, padding:'2px 0', lineHeight:1.5 }}>
-                  {i + 1}
+                <div
+                  onPointerDown={e => onFramePointerDown(e, i)}
+                  title="ドラッグして並べ替え"
+                  style={{ background:dragFrameIdx===i?'#5ba8ff':(i===fi?'#ff6b9d':'white'), color:(dragFrameIdx===i||i===fi)?'white':'#333', textAlign:'center', fontSize:9, fontWeight:700, padding:'3px 0', lineHeight:1.5, cursor:'grab', touchAction:'none', userSelect:'none' }}>
+                  ⠿ {i + 1}
                 </div>
               </div>
             ))}
