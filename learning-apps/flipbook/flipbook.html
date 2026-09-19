@@ -723,81 +723,46 @@ function App() {
     setFrames(p => { const n=[...p]; n.splice(fi+1,0,nf); return n; }); setFi(fi+1); setLi(0);
   };
   const delFrame = () => { if (frames.length<=1) return; pushFramesUndo(); setFrames(p=>p.filter((_,i)=>i!==fi)); setFi(Math.max(0,fi-1)); setLi(0); };
-  const mvFrame = dir => { const ni=fi+dir; if(ni<0||ni>=frames.length)return; pushFramesUndo(); setFrames(p=>{const n=[...p];[n[fi],n[ni]]=[n[ni],n[fi]];return n;}); setFi(ni); };
+  const goPrevFrame = () => { if (fi <= 0) return; setFi(fi - 1); setLi(0); };
+  const goNextFrame = () => { if (fi >= frames.length - 1) return; setFi(fi + 1); setLi(0); };
 
-  const frameDrag = useRef(null); // { startX, startY, curIdx, moved, pointerId }
-  const justDraggedFrame = useRef(false);
-  const frameSlotEls = useRef({}); // index -> DOM node, refreshed on every render
+  const dragFrameFrom = useRef(null);
   const [dragFrameIdx, setDragFrameIdx] = useState(null);
-  const DRAG_THRESHOLD = 8;
+  const [dragOverFrameIdx, setDragOverFrameIdx] = useState(null);
 
-  const onFramePointerDown = (e, i) => {
+  const onFrameDragStart = (e, i) => {
     if (playing) return;
-    frameDrag.current = { startX: e.clientX, startY: e.clientY, curIdx: i, moved: false, pointerId: e.pointerId };
+    dragFrameFrom.current = i;
     setDragFrameIdx(i);
-    setStatus("✋ " + (i + 1) + "枚目をつかみました。ずらすと並び替わります");
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); } catch (err) {}
   };
-
-  // Window-level listeners (not tied to the handle element) so the drag keeps
-  // working regardless of re-renders, pointer capture quirks, or the cursor
-  // moving over other elements.
-  useEffect(() => {
-    const handleMove = e => {
-      const d = frameDrag.current; if (!d) return;
-      try {
-        if (!d.moved) {
-          if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < DRAG_THRESHOLD) return;
-          d.moved = true;
-          pushFramesUndo();
-        }
-        let overIdx = null;
-        const entries = Object.entries(frameSlotEls.current);
-        for (let k = 0; k < entries.length; k++) {
-          const [idxStr, node] = entries[k];
-          if (!node) continue;
-          const r = node.getBoundingClientRect();
-          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
-            overIdx = parseInt(idxStr, 10);
-            break;
-          }
-        }
-        if (overIdx === null || Number.isNaN(overIdx) || overIdx === d.curIdx) return;
-        setFrames(p => {
-          const n = [...p];
-          const [moved] = n.splice(d.curIdx, 1);
-          n.splice(overIdx, 0, moved);
-          return n;
-        });
-        if (FI.current === d.curIdx) setFi(overIdx);
-        d.curIdx = overIdx;
-        setDragFrameIdx(overIdx);
-        setStatus("↔ " + (overIdx + 1) + "番目に移動中…");
-      } catch (err) {
-        setStatus("✗ ドラッグ中にエラー: " + err.message);
-      }
-    };
-    const handleUp = () => {
-      const d = frameDrag.current;
-      if (!d) return;
-      frameDrag.current = null;
-      setDragFrameIdx(null);
-      if (d.moved) {
-        justDraggedFrame.current = true;
-        setTimeout(() => { justDraggedFrame.current = false; }, 50);
-        setStatus("✓ 並び替えました");
-      } else {
-        setStatus("準備完了");
-      }
-    };
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
-    window.addEventListener('pointercancel', handleUp);
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-      window.removeEventListener('pointercancel', handleUp);
-    };
-  }, []);
+  const onFrameDragOver = (e, i) => {
+    if (dragFrameFrom.current === null) return;
+    e.preventDefault(); // required to allow dropping
+    if (dragOverFrameIdx !== i) setDragOverFrameIdx(i);
+  };
+  const onFrameDrop = (e, i) => {
+    e.preventDefault();
+    const from = dragFrameFrom.current;
+    dragFrameFrom.current = null;
+    setDragFrameIdx(null);
+    setDragOverFrameIdx(null);
+    if (from === null || from === i) return;
+    pushFramesUndo();
+    setFrames(p => {
+      const n = [...p];
+      const [moved] = n.splice(from, 1);
+      n.splice(i, 0, moved);
+      return n;
+    });
+    if (fi === from) setFi(i);
+    setStatus("✓ 並び替えました");
+  };
+  const onFrameDragEnd = () => {
+    dragFrameFrom.current = null;
+    setDragFrameIdx(null);
+    setDragOverFrameIdx(null);
+  };
 
   const addLayer = () => { pushFramesUndo(); const nl=mkLayer(`レイヤー${frames[fi].layers.length+1}`); setFrames(p=>p.map((f,i)=>i!==fi?f:{...f,layers:[...f.layers,nl]})); setLi(frames[fi].layers.length); };
   const delLayer = () => {
@@ -1112,24 +1077,33 @@ function App() {
               <SB onClick={addFrame}>＋ 追加</SB>
               <SB onClick={copyFrame}>⊕ コピー</SB>
               <div style={{ display:'flex', gap:2 }}>
-                <SB onClick={() => mvFrame(-1)} disabled={fi === 0}>◀</SB>
-                <SB onClick={() => mvFrame(1)} disabled={fi === frames.length - 1}>▶</SB>
+                <SB onClick={goPrevFrame} disabled={fi === 0} title="前のページ">◀</SB>
+                <SB onClick={goNextFrame} disabled={fi === frames.length - 1} title="次のページ">▶</SB>
               </div>
               <SB onClick={delFrame} disabled={frames.length <= 1} style={{ color:'#c44569' }}>✕ 削除</SB>
             </div>
             <div style={{ width:1, height:80, background:'rgba(0,0,0,0.1)', flexShrink:0, marginRight:2 }} />
             {frames.map((f, i) => (
-              <div key={f.id} data-frame-index={i}
-                ref={node => { frameSlotEls.current[i] = node; }}
-                onClick={() => { if (!playing && !justDraggedFrame.current) { setFi(i); setLi(0); } }}
-                style={{ width:TW, flexShrink:0, cursor:'pointer', opacity:dragFrameIdx===i?0.55:1, transform:dragFrameIdx===i?'scale(1.08)':'none', transition:'transform 0.12s, opacity 0.12s, box-shadow 0.12s', border:dragFrameIdx===i?'2px solid #5ba8ff':(i===fi?'2px solid #ff6b9d':'2px solid #ddd'), borderRadius:4, overflow:'hidden', background:'#f5f5f8', position:'relative', boxShadow:dragFrameIdx===i?'0 4px 14px rgba(91,168,255,0.55)':'0 2px 4px rgba(0,0,0,0.08)' }}>
+              <div key={f.id}
+                draggable={!playing}
+                onDragStart={e => onFrameDragStart(e, i)}
+                onDragOver={e => onFrameDragOver(e, i)}
+                onDrop={e => onFrameDrop(e, i)}
+                onDragEnd={onFrameDragEnd}
+                onClick={() => { if (!playing) { setFi(i); setLi(0); } }}
+                title="ドラッグして並べ替え／タップで選択"
+                style={{
+                  width:TW, flexShrink:0, cursor:'grab',
+                  opacity:dragFrameIdx===i?0.4:1,
+                  transform:dragOverFrameIdx===i && dragFrameIdx!==i?'scale(1.08)':'none',
+                  transition:'transform 0.12s, opacity 0.12s, box-shadow 0.12s',
+                  border:dragOverFrameIdx===i && dragFrameIdx!==i?'2px dashed #5ba8ff':(i===fi?'2px solid #ff6b9d':'2px solid #ddd'),
+                  borderRadius:4, overflow:'hidden', background:'#f5f5f8', position:'relative', boxShadow:'0 2px 4px rgba(0,0,0,0.08)'
+                }}>
                 <div style={{ height:TH, overflow:'hidden', background:'#f5f5f8' }}>
                   {thumbs[f.id] && <img src={thumbs[f.id]} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} draggable={false} />}
                 </div>
-                <div
-                  onPointerDown={e => onFramePointerDown(e, i)}
-                  title="ドラッグして並べ替え"
-                  style={{ background:dragFrameIdx===i?'#5ba8ff':(i===fi?'#ff6b9d':'white'), color:(dragFrameIdx===i||i===fi)?'white':'#333', textAlign:'center', fontSize:9, fontWeight:700, padding:'3px 0', lineHeight:1.5, cursor:'grab', touchAction:'none', userSelect:'none' }}>
+                <div style={{ background:i===fi?'#ff6b9d':'white', color:i===fi?'white':'#333', textAlign:'center', fontSize:9, fontWeight:700, padding:'2px 0', lineHeight:1.5 }}>
                   ⠿ {i + 1}
                 </div>
               </div>
