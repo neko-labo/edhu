@@ -45,7 +45,76 @@ function normRect(x1, y1, x2, y2) {
   return { x: Math.min(x1,x2), y: Math.min(y1,y2), w: Math.abs(x2-x1), h: Math.abs(y2-y1) };
 }
 
+const TEXT_FONT = 'Klee One, "Hiragino Kaku Gothic ProN", sans-serif';
+
+function measureTextBox(ctx, text, fontSize, bubble) {
+  ctx.font = `bold ${fontSize}px ${TEXT_FONT}`;
+  const lines = (text || ' ').split('\n');
+  const widths = lines.map(l => ctx.measureText(l || ' ').width);
+  const textW = Math.max(...widths, fontSize);
+  const lineHeight = fontSize * 1.35;
+  const textH = lineHeight * lines.length;
+  const padX = fontSize * 0.55, padY = fontSize * 0.4;
+  const bodyW = textW + padX * 2;
+  const bodyH = textH + padY * 2;
+  const tailH = bubble ? fontSize * 0.8 : 0;
+  return { w: Math.round(bodyW), h: Math.round(bodyH + tailH) };
+}
+
+function getObjSize(obj, materials) {
+  if (obj.type === 'text') return { w: obj.w || 10, h: obj.h || 10 };
+  const mat = materials.find(m => m.id === obj.materialId);
+  return mat ? { w: mat.w, h: mat.h } : null;
+}
+
+function drawTextObj(ctx, obj) {
+  const sc = obj.scale || 1;
+  const fontSize = (obj.fontSize || 22) * sc;
+  const w = (obj.w || 10) * sc, h = (obj.h || 10) * sc;
+  const lines = (obj.text || '').split('\n');
+  const lineHeight = fontSize * 1.35;
+  const tailH = obj.bubble ? fontSize * 0.8 : 0;
+  const bodyH = h - tailH;
+  ctx.save();
+  ctx.translate(obj.x, obj.y);
+  ctx.rotate((obj.rotation || 0) * Math.PI / 180);
+  const top = -h / 2;
+  if (obj.bubble) {
+    const r = Math.min(w, bodyH) * 0.22;
+    const x0 = -w / 2, y0 = top;
+    ctx.beginPath();
+    ctx.moveTo(x0 + r, y0);
+    ctx.lineTo(x0 + w - r, y0);
+    ctx.arcTo(x0 + w, y0, x0 + w, y0 + r, r);
+    ctx.lineTo(x0 + w, y0 + bodyH - r);
+    ctx.arcTo(x0 + w, y0 + bodyH, x0 + w - r, y0 + bodyH, r);
+    ctx.lineTo(x0 + w * 0.42, y0 + bodyH);
+    ctx.lineTo(x0 + w * 0.22, y0 + bodyH + tailH);
+    ctx.lineTo(x0 + w * 0.30, y0 + bodyH);
+    ctx.lineTo(x0 + r, y0 + bodyH);
+    ctx.arcTo(x0, y0 + bodyH, x0, y0 + bodyH - r, r);
+    ctx.lineTo(x0, y0 + r);
+    ctx.arcTo(x0, y0, x0 + r, y0, r);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = obj.color || '#000000';
+    ctx.lineWidth = Math.max(2, fontSize * 0.09);
+    ctx.stroke();
+  }
+  ctx.fillStyle = obj.color || '#000000';
+  ctx.font = `bold ${fontSize}px ${TEXT_FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const textBlockH = lineHeight * lines.length;
+  const centerY = top + bodyH / 2;
+  const startY = centerY - textBlockH / 2 + lineHeight / 2;
+  lines.forEach((line, i) => ctx.fillText(line, 0, startY + lineHeight * i));
+  ctx.restore();
+}
+
 function drawMatObj(ctx, obj, materials, imgCacheObj) {
+  if (obj.type === 'text') { drawTextObj(ctx, obj); return; }
   const mat = materials.find(m => m.id === obj.materialId);
   if (!mat) return;
   const img = imgCacheObj[obj.materialId];
@@ -111,6 +180,8 @@ function App() {
   const [stampMat, setStampMat] = useState(null);
   const [bottomTab, setBTab] = useState('frames');
   const [selObj, setSelObj] = useState(null);
+  const [textBubble, setTextBubble] = useState(true);
+  const [textInput, setTextInput] = useState(null); // { x, y, value } while editing
 
   const cvs = useRef(null);
   const ovl = useRef(null);
@@ -170,6 +241,7 @@ function App() {
   const TR = useRef(tool); useEffect(() => { TR.current = tool; }, [tool]);
   const OR = useRef(onion); useEffect(() => { OR.current = onion; }, [onion]);
   const SM = useRef(stampMat); useEffect(() => { SM.current = stampMat; }, [stampMat]);
+  const TI = useRef(textInput); useEffect(() => { TI.current = textInput; }, [textInput]);
   const SEL = useRef(selRect); useEffect(() => { SEL.current = selRect; }, [selRect]);
   const SOB = useRef(selObj); useEffect(() => { SOB.current = selObj; }, [selObj]);
   const FPSR = useRef(fps); useEffect(() => { FPSR.current = fps; }, [fps]);
@@ -367,10 +439,10 @@ function App() {
     // Draw selected object outline + handle icons
     if (SOB.current && TR.current === 'select') {
       const obj = SOB.current;
-      const mat = materials.find(m => m.id === obj.materialId);
-      if (mat) {
+      const size = getObjSize(obj, materials);
+      if (size) {
         const sc = obj.scale || 1;
-        const hw = (mat.w * sc) / 2, hh = (mat.h * sc) / 2;
+        const hw = (size.w * sc) / 2, hh = (size.h * sc) / 2;
         const c1 = objLocalToWorld(obj, -hw, -hh);
         const c2 = objLocalToWorld(obj, hw, -hh);
         const c3 = objLocalToWorld(obj, hw, hh);
@@ -406,6 +478,7 @@ function App() {
   useEffect(() => {
     if (tool !== 'select') { setSelRect(null); }
     if (tool !== 'stamp')  { setStampMat(null); }
+    if (tool !== 'text')   { setTextInput(null); }
     if (tool !== 'select' && tool !== 'stamp') {
       const oc = ovl.current; if (oc) oc.getContext('2d').clearRect(0, 0, CW, CH);
     }
@@ -486,10 +559,10 @@ function App() {
       // Check handle hits on the currently selected object first
       if (SOB.current) {
         const obj = SOB.current;
-        const mat = materials.find(m => m.id === obj.materialId);
-        if (mat) {
+        const size = getObjSize(obj, materials);
+        if (size) {
           const sc = obj.scale || 1;
-          const hw = (mat.w * sc) / 2, hh = (mat.h * sc) / 2;
+          const hw = (size.w * sc) / 2, hh = (size.h * sc) / 2;
           const loc = worldToObjLocal(obj, pos.x, pos.y);
           const near = (ax, ay) => Math.hypot(loc.x - ax, loc.y - ay) < HANDLE_HIT;
 
@@ -535,12 +608,12 @@ function App() {
           .flatMap(l => objs.filter(o => o.layerId === l.id).slice().reverse());
         const hitOrder = [...orphaned, ...byLayerTopFirst];
         for (const obj of hitOrder) {
-          const mat = materials.find(m => m.id === obj.materialId);
-          if (!mat) continue;
+          const size = getObjSize(obj, materials);
+          if (!size) continue;
           const sc = obj.scale || 1;
           const dx = pos.x - obj.x;
           const dy = pos.y - obj.y;
-          if (Math.abs(dx) < mat.w*sc/2 && Math.abs(dy) < mat.h*sc/2) {
+          if (Math.abs(dx) < size.w*sc/2 && Math.abs(dy) < size.h*sc/2) {
             pushObjUndo(frame.id, frame.objects);
             setSelObj(obj);
             dragMode.current = 'move';
@@ -575,6 +648,12 @@ function App() {
       setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: [...(f.objects || []), newObj] }));
       rerender(); mkThumb(frame);
       setStatus("✓「" + mat.name + "」を" + (curLayer ? curLayer.name : '') + "に配置しました");
+      return;
+    }
+
+    if (t === 'text') {
+      if (TI.current) return; // already editing one
+      setTextInput({ x: pos.x, y: pos.y, value: '' });
       return;
     }
 
@@ -885,6 +964,36 @@ function App() {
     setStatus("「" + mat.name + "」をスタンプ中");
   };
 
+  const confirmTextInput = () => {
+    if (!textInput || !textInput.value.trim()) { setTextInput(null); return; }
+    const frame = FR.current[FI.current]; if (!frame) { setTextInput(null); return; }
+    const curLayer = frame.layers[LI.current] || frame.layers[0];
+    const fontSize = 22;
+    const box = measureTextBox(cvs.current.getContext('2d'), textInput.value, fontSize, textBubble);
+    const newObj = {
+      id: noid(),
+      type: 'text',
+      text: textInput.value,
+      color: CR.current,
+      bubble: textBubble,
+      fontSize,
+      w: box.w,
+      h: box.h,
+      x: textInput.x,
+      y: textInput.y,
+      rotation: 0,
+      scale: 1,
+      layerId: curLayer ? curLayer.id : null
+    };
+    pushObjUndo(frame.id, frame.objects);
+    setFrames(p => p.map((f, i) => i !== FI.current ? f : { ...f, objects: [...(f.objects || []), newObj] }));
+    setTextInput(null);
+    setTool('select');
+    setSelObj(newObj);
+    rerender(); mkThumb(frame);
+    setStatus("✓ 文字を配置しました");
+  };
+
   const expGif = () => {
     if (!gifOk || !window.GIF || !gifWorkerUrl.current) { setStatus("GIF機能を読み込み中..."); return; }
     setGifBusy(true);
@@ -978,6 +1087,12 @@ function App() {
         {tool === 'stamp' && (
           <Btn onClick={() => { setTool('pen'); setStampMat(null); }}>✕ 解除</Btn>
         )}
+        {tool === 'text' && (
+          <>
+            <Btn onClick={() => setTextBubble(true)} hi={textBubble}>💬 ふきだし</Btn>
+            <Btn onClick={() => setTextBubble(false)} hi={!textBubble}>📝 テキストのみ</Btn>
+          </>
+        )}
         <Btn onClick={doUndo}>↩ 元に戻す</Btn>
         <span style={{ fontSize:10, color:'#667', marginLeft:'auto', whiteSpace:'nowrap' }}>{status}</span>
       </div>
@@ -985,7 +1100,7 @@ function App() {
       <div style={{ display:'flex', flex:1, overflow:'hidden', minHeight:0 }}>
 
         <div style={{ width:54, display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'8px 4px', background:'rgba(255,255,255,0.5)', borderRight:'1px solid rgba(0,0,0,0.1)', flexShrink:0, overflowY:'auto' }}>
-          {[['pen','✏️','ペン'],['eraser',<EraserIcon key="ic" />,'消しゴム'],['fill','🪣','塗りつぶし'],['select','□','選択・操作']].map(([t, ic, lb]) => (
+          {[['pen','✏️','ペン'],['eraser',<EraserIcon key="ic" />,'消しゴム'],['fill','🪣','塗りつぶし'],['select','□','選択・操作'],['text','💬','ふきだし・テキスト']].map(([t, ic, lb]) => (
             <TBtn key={t} active={tool === t} onClick={() => setTool(t)} title={lb}>{ic}</TBtn>
           ))}
           {stampMat && <TBtn active={tool==='stamp'} onClick={()=>setTool('stamp')} title={stampMat.name} style={{ background: '#ff6b9d' }}>🖼</TBtn>}
@@ -1024,6 +1139,29 @@ function App() {
               onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp} />
             <canvas ref={ovl} width={CW} height={CH}
               style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', borderRadius:3 }} />
+            {textInput && (
+              <div style={{
+                position:'absolute',
+                left:(textInput.x / CW * 100) + '%',
+                top:(textInput.y / CH * 100) + '%',
+                transform:'translate(-50%, -50%)',
+                zIndex:10, display:'flex', flexDirection:'column', gap:5, alignItems:'center'
+              }}>
+                <textarea
+                  autoFocus
+                  value={textInput.value}
+                  onChange={e => setTextInput(p => ({ ...p, value: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Escape') setTextInput(null); }}
+                  placeholder="ここにかいてね"
+                  style={{ width:150, minHeight:56, padding:7, borderRadius:9, border:'2px solid #ff6b9d', fontSize:14, fontFamily:'inherit', resize:'both', boxShadow:'0 4px 14px rgba(0,0,0,0.25)', outline:'none' }} />
+                <div style={{ display:'flex', gap:6 }}>
+                  <button onClick={confirmTextInput}
+                    style={{ padding:'5px 12px', background:'#ff6b9d', color:'white', border:'none', borderRadius:7, fontSize:11, fontWeight:700, cursor:'pointer', boxShadow:'0 2px 4px rgba(0,0,0,0.15)' }}>✓ けってい</button>
+                  <button onClick={() => setTextInput(null)}
+                    style={{ padding:'5px 12px', background:'#bbb', color:'white', border:'none', borderRadius:7, fontSize:11, fontWeight:700, cursor:'pointer', boxShadow:'0 2px 4px rgba(0,0,0,0.15)' }}>✕ やめる</button>
+                </div>
+              </div>
+            )}
           </div>
           {selObj && tool === 'select' && (
             <div style={{ fontSize:10.5, color:'#a88', marginTop:8, textAlign:'center', lineHeight:1.6 }}>
