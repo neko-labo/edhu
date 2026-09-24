@@ -85,6 +85,7 @@ canvas{ position:absolute;inset:0;width:100%;height:100%; }
 .btn-yellow{ background:var(--yellow);color:#7a5b00; }
 .btn-yellow.on{ background:var(--green);color:#fff; }
 .btn-purple{ background:#9b6bff; }
+.btn-check{ background:var(--green);font-size:1rem;padding:10px 26px; }
 
 .result-msg{
   font-size:1rem;font-weight:bold;min-height:1.6em;text-align:center;flex-shrink:0;
@@ -150,10 +151,14 @@ canvas{ position:absolute;inset:0;width:100%;height:100%; }
 
     <div class="btn-row">
       <button class="s-btn btn-gray" onclick="clearDraw()">🗑 けす</button>
-      <button class="s-btn btn-blue" id="ref-toggle-btn" onclick="toggleRef()">👀 おてほん</button>
-      <button class="s-btn btn-yellow" id="num-toggle-btn" onclick="toggleNumbers()">① ばんごう</button>
+      <button class="s-btn btn-blue" id="ref-toggle-btn" onclick="toggleRef()">☐ おてほん</button>
+      <button class="s-btn btn-yellow" id="num-toggle-btn" onclick="toggleNumbers()">☐ かきじゅん</button>
       <button class="s-btn btn-purple" onclick="playAnim()">▶ うごかす</button>
-      <button class="s-btn btn-pink" onclick="checkDraw()">✓ かくにんする</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="s-btn btn-blue" id="replay-btn" style="display:none" onclick="replayUser()">🎬 さいせい</button>
+      <button class="s-btn btn-check" onclick="checkDraw()">✓ かくにんする</button>
     </div>
 
     <div class="result-msg" id="result-msg"></div>
@@ -644,6 +649,8 @@ let drawing = false;
 let hasDrawn = false;
 let showRef = false;       // お手本を常時表示するかどうか
 let showNumbers = false;   // 書き順の番号だけを常時表示するかどうか
+let userStrokes = [];      // ユーザーが書いた画（点列の配列）
+let curStroke = null;      // 書いている途中の画
 
 try {
   const s = localStorage.getItem('tegaki_stars_v1');
@@ -728,6 +735,9 @@ function setupDrawCanvas() {
   ctx.lineJoin = 'round';
   drawing = false;
   hasDrawn = false;
+  userStrokes = [];
+  curStroke = null;
+  const rb = document.getElementById('replay-btn'); if (rb) rb.style.display = 'none';
 
   const gpos = e => {
     const r = cvDraw.getBoundingClientRect();
@@ -743,20 +753,26 @@ function setupDrawCanvas() {
     cvDraw.setPointerCapture(e.pointerId);
     drawing = true; hasDrawn = true;
     const p = gpos(e);
+    p.t = performance.now(); curStroke = [p];
     ctx.beginPath(); ctx.moveTo(p.x, p.y);
   };
   cvDraw.onpointermove = e => {
     if (!drawing) return;
     e.preventDefault();
     const p = gpos(e);
+    if (curStroke) { p.t = performance.now(); curStroke.push(p); }
     ctx.lineTo(p.x, p.y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(p.x, p.y);
   };
-  cvDraw.onpointerup = cvDraw.onpointercancel = () => { drawing = false; };
+  cvDraw.onpointerup = cvDraw.onpointercancel = () => {
+    if (curStroke && curStroke.length >= 2) { userStrokes.push(curStroke); document.getElementById('replay-btn').style.display = ''; }
+    curStroke = null;
+    drawing = false;
+  };
 }
 
 function clearDraw() {
-  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; } cvDraw.style.visibility = 'visible';
   setupDrawCanvas();
   renderOverlay();
   setResult('', '');
@@ -767,7 +783,7 @@ function toggleRef() {
   showRef = !showRef;
   const btn = document.getElementById('ref-toggle-btn');
   btn.classList.toggle('on', showRef);
-  btn.textContent = showRef ? '🙈 かくす' : '👀 おてほん';
+  btn.textContent = showRef ? '☑ おてほん' : '☐ おてほん';
   renderOverlay();
 }
 
@@ -776,15 +792,15 @@ function toggleNumbers() {
   showNumbers = !showNumbers;
   const btn = document.getElementById('num-toggle-btn');
   btn.classList.toggle('on', showNumbers);
-  btn.textContent = showNumbers ? '🙈 かくす' : '① ばんごう';
+  btn.textContent = showNumbers ? '☑ かきじゅん' : '☐ かきじゅん';
   renderOverlay();
 }
 
 // お手本・書き順番号をまとめて描画する（トグル状態に応じて重ね合わせる）
-function renderOverlay(forceRef) {
+function renderOverlay(forceRef, forceNum) {
   clearCanvas(cvRef);
   if (showRef || forceRef) drawRefShape();
-  if (showNumbers) drawStrokeNumbersStatic();
+  if (showNumbers || forceNum) drawStrokeNumbersStatic();
 }
 
 // お手本の形（塗りつぶし）を描画。medians ではなく strokes（実際の文字のかたち）を使って、
@@ -809,7 +825,7 @@ function drawRefShape() {
 // ============================================================
 function playAnim() {
   if (!curData) return;
-  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; } cvDraw.style.visibility = 'visible';
 
   const groups = groupStrokes(curData, curDisplayChar, true).filter(g => g.median && g.median.length >= 2 && g.path);
   if (!groups.length) return;
@@ -1086,6 +1102,117 @@ function computeMatch(data, drawCanvas) {
   return both / (a+b-both);
 }
 
+// ============================================================
+// 書き順・向き・画数のチェック
+// 1) ユーザーの画を「全体の外接矩形」でお手本に位置・大きさ合わせ
+// 2) 各画を24点に等間隔リサンプル
+// 3) i画目のユーザーの画が、お手本のどの画に一番近いかを比較
+//    - 別の画に近い → 書き順ちがい
+//    - 同じ画に近いが逆向きの方が近い → 向きちがい
+// 形そのもののズレはIoU判定に任せる（ここでは見ない）
+// ============================================================
+function resampleN(pts, n) {
+  const cum = [0];
+  for (let i = 0; i < pts.length - 1; i++) cum.push(cum[i] + Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y));
+  const tot = cum[cum.length-1];
+  if (tot === 0) return Array.from({length:n}, () => ({x:pts[0].x, y:pts[0].y}));
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const d = tot * k / (n-1);
+    let j = 0;
+    while (j < cum.length - 2 && cum[j+1] < d) j++;
+    const seg = (cum[j+1]-cum[j]) || 1;
+    const t = (d - cum[j]) / seg;
+    out.push({x: pts[j].x + (pts[j+1].x-pts[j].x)*t, y: pts[j].y + (pts[j+1].y-pts[j].y)*t});
+  }
+  return out;
+}
+function ptsBox(list) {
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  list.forEach(pts => pts.forEach(p => { x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); x1=Math.max(x1,p.x); y1=Math.max(y1,p.y); }));
+  return {x0,y0,x1,y1,cx:(x0+x1)/2,cy:(y0+y1)/2,size:Math.max(x1-x0,y1-y0)};
+}
+function pathCost(a, b, scale) {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += Math.hypot(a[i].x-b[i].x, a[i].y-b[i].y);
+  return s / a.length / scale;
+}
+function checkStrokeOrder() {
+  const N = 24, FAR = 0.28;
+  const groups = groupStrokes(curData, curDisplayChar).filter(g => g.median && g.median.length >= 2);
+  const n = groups.length;
+  if (!n) return { ok: true };
+  if (userStrokes.length !== n) {
+    return { ok: false, msg: userStrokes.length > n ? 'かくすうが おおいよ（' + n + 'かくだよ）' : 'かくすうが たりないよ（' + n + 'かくだよ）' };
+  }
+  const sc = cvSize / VBOX;
+  const ref = groups.map(g => resampleN(g.median.map(([x,y]) => ({x:x*sc, y:y*sc})), N));
+  const rb = ptsBox(ref);
+  const ub = ptsBox(userStrokes);
+  if (ub.size < 1 || rb.size < 1) return { ok: true };
+  const k = Math.max(0.5, Math.min(2, rb.size / ub.size));
+  const usr = userStrokes.map(st => resampleN(st.map(p => ({x:(p.x-ub.cx)*k+rb.cx, y:(p.y-ub.cy)*k+rb.cy})), N));
+
+  for (let i = 0; i < n; i++) {
+    const rev = usr[i].slice().reverse();
+    const fwd = [], bwd = [], best = [];
+    for (let j = 0; j < n; j++) {
+      fwd[j] = pathCost(usr[i], ref[j], rb.size);
+      bwd[j] = pathCost(rev, ref[j], rb.size);
+      best[j] = Math.min(fwd[j], bwd[j]);
+    }
+    let jb = 0;
+    for (let j = 1; j < n; j++) if (best[j] < best[jb]) jb = j;
+    if (best[jb] > FAR) continue; // 形が大きくずれている画は、形の判定に任せる
+    if (jb !== i && best[i] > best[jb] * 1.25 + 0.03) {
+      return { ok: false, msg: 'かきじゅんが ちがうよ！ ' + (i+1) + 'かくめは ' + (jb+1) + 'ばんの ところだよ' };
+    }
+    if (bwd[i] < fwd[i] * 0.7) {
+      return { ok: false, msg: (i+1) + 'かくめの むきが ぎゃくだよ！ やじるしを みてね' };
+    }
+  }
+  return { ok: true };
+}
+
+// 子どもが書いた通りに、順番・速さそのままで再生する（長い待ちは短縮）
+function replayUser(done) {
+  if (!userStrokes.length) { setResult('まだ かいてないよ', 'ng'); return; }
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
+  const ctx = cvRef.getContext('2d');
+  cvDraw.style.visibility = 'hidden';
+  const lw = Math.max(8, cvSize * 0.045);
+  const GAP = 350;
+  const segs = userStrokes.map(st => {
+    const t0 = st[0].t;
+    const orig = Math.max(1, st[st.length-1].t - t0);
+    return { st, t0, orig, dur: Math.max(250, Math.min(1200, orig)) };
+  });
+  const starts = []; let acc = 0;
+  segs.forEach(sg => { starts.push(acc); acc += sg.dur + GAP; });
+  const total = acc;
+  const begin = performance.now();
+
+  function frame(now) {
+    const el = now - begin;
+    ctx.clearRect(0, 0, cvSize, cvSize);
+    segs.forEach((sg, i) => {
+      const local = el - starts[i];
+      if (local < 0) return;
+      const tt = Math.min(1, local / sg.dur) * sg.orig;
+      let pts = sg.st.filter(p => p.t - sg.t0 <= tt);
+      if (!pts.length) pts = [sg.st[0]];
+      if (pts.length < 2) pts = [pts[0], { x: pts[0].x + 0.01, y: pts[0].y }];
+      drawSmoothLine(ctx, pts, hexToRgba(strokeColor(i), 0.95), lw, false);
+    });
+    if (el < total) { animRaf = requestAnimationFrame(frame); return; }
+    animRaf = null;
+    cvDraw.style.visibility = 'visible';
+    renderOverlay();
+    if (done) done();
+  }
+  animRaf = requestAnimationFrame(frame);
+}
+
 function setResult(msg, cls) {
   const el = document.getElementById('result-msg');
   el.textContent = msg;
@@ -1106,6 +1233,16 @@ async function checkDraw() {
   const iou = computeMatch(curData, cvDraw);
 
   if (iou >= 0.30) {
+    {
+      const so = checkStrokeOrder();
+      if (!so.ok) {
+        streak = 0;
+        renderStreak();
+        setResult('かきじゅんが ちがうよ！！', 'ng');
+        replayUser(() => renderOverlay(false, true)); // 書いた通りに再生 → 正しい番号と矢印
+        return;
+      }
+    }
     streak++;
     starTotal++;
     document.getElementById('star-count').textContent = starTotal;
@@ -1144,7 +1281,7 @@ function pickKindForChar() {
 }
 
 async function loadNewChar() {
-  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; } cvDraw.style.visibility = 'visible';
   const hiraChar = pickChar();
   curChar = hiraChar;
   const useKind = pickKindForChar();
