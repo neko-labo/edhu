@@ -221,7 +221,7 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
     <div class="sentence-controls no-capture">
       <div class="sctrl">
         <label>いれもの</label>
-        <select id="s-container" onchange="updateSentence()">
+        <select id="s-container" onchange="onContainerChange()">
           <option value="plate">おさら</option>
           <option value="box">はこ</option>
           <option value="basket">かご</option>
@@ -268,6 +268,7 @@ const WORD_MAP = {
 };
 const LABELS = { plate:'おさら', box:'はこ', basket:'かご' };
 const ICONS = { plate:'🍽️', box:'📦', basket:'🧺' };
+const COUNTERS = { plate:'まい', box:'こ', basket:'こ' };
 
 let containers = []; // { id, type, items:[emoji,...] }
 let nextId = 1;
@@ -404,6 +405,8 @@ function renderAll() {
 
     area.appendChild(card);
   });
+
+  syncSentenceFromWork(true);
 }
 
 // ============================================================
@@ -420,15 +423,44 @@ function buildItemSelect() {
   });
 }
 
+// ③のエリアに実際に置いた容器・中身を、文章の数字に反映する
+function syncSentenceFromWork(autoSwitchType) {
+  if (containers.length === 0) { updateSentence(); return; }
+  const sel = document.getElementById('s-container');
+  let same = containers.filter(c => c.type === sel.value);
+  if (same.length === 0 && autoSwitchType) {
+    sel.value = containers[containers.length - 1].type;
+    same = containers.filter(c => c.type === sel.value);
+  }
+  if (same.length > 0) {
+    document.getElementById('s-groups').textContent = same.length;
+    // 全部の容器が「同じもの・同じ数」のときだけ、なかみと1つぶんの数も合わせる
+    const first = same[0];
+    const uniform = first.items.length > 0 &&
+      first.items.every(it => it === first.items[0]) &&
+      same.every(c => c.items.length === first.items.length && c.items.every(it => it === first.items[0]));
+    if (uniform) {
+      document.getElementById('s-item').value = first.items[0];
+      document.getElementById('s-per').textContent = first.items.length;
+    }
+  }
+  updateSentence();
+}
+
+function onContainerChange() {
+  syncSentenceFromWork(false);
+}
+
 function updateSentence() {
   const containerWord = LABELS[document.getElementById('s-container').value];
   const itemEmoji = document.getElementById('s-item').value;
   const itemWord = WORD_MAP[itemEmoji];
   const per = document.getElementById('s-per').textContent || 0;
   const groups = document.getElementById('s-groups').textContent || 0;
+  const counter = COUNTERS[document.getElementById('s-container').value];
 
   const html = `ひとつの<b>${containerWord}</b>に、<b>${itemWord}</b>が<b>${per}</b>こずつ 入っています。<br>
-    <b>${containerWord}</b>は<b>${groups}</b>こ あります。<br>
+    <b>${containerWord}</b>は<b>${groups}</b>${counter} あります。<br>
     ${itemWord}は ぜんぶで なんこ ありますか。`;
   document.getElementById('sentence-preview').innerHTML = html;
 }
