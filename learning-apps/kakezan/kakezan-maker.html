@@ -29,16 +29,6 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 
 .wrap{ max-width:900px;margin:0 auto;width:100%;padding:14px 14px 60px; }
 
-.prompt-box{
-  background:var(--card);border:2px solid var(--pink-l);border-radius:12px;
-  padding:10px 14px;margin-bottom:14px;
-}
-.prompt-box label{ font-size:0.72rem;color:var(--gray);font-weight:bold;display:block;margin-bottom:4px; }
-.prompt-box input{
-  width:100%;border:none;font-family:inherit;font-size:1rem;color:var(--text);
-  outline:none;background:transparent;
-}
-
 .section-label{ font-size:0.75rem;color:var(--gray);font-weight:bold;margin:14px 0 6px; }
 .section-note{ font-size:0.7rem;color:#bbb;margin:-4px 0 8px; }
 
@@ -51,7 +41,14 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 }
 .item-src:active{ cursor:grabbing; }
 
-.add-row{ display:flex;gap:8px;margin:14px 0;flex-wrap:wrap; }
+.tab-row{ display:flex;gap:4px;margin-top:18px; }
+.tab-btn{
+  padding:7px 16px;border:2px solid var(--pink-l);border-bottom:none;border-radius:12px 12px 0 0;
+  background:#fdf0f5;color:var(--gray);font-family:inherit;font-size:0.82rem;font-weight:bold;cursor:pointer;
+}
+.tab-btn.active{ background:var(--blue-l);color:var(--blue);border-color:var(--blue-l); }
+.add-row{ display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap;padding:10px;background:var(--blue-l);border-radius:0 12px 12px 12px; }
+.add-btn{ background:#fff !important; }
 .add-btn{
   padding:9px 16px;border:none;border-radius:12px;background:var(--blue-l);color:var(--blue);
   font-family:inherit;font-size:0.85rem;font-weight:bold;cursor:pointer;
@@ -64,19 +61,26 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
   padding:16px;background:#fff;border:2px dashed #eee;border-radius:14px;
 }
 .work-area.empty::before{
-  content:"↑ボタンで お皿・はこ・かごを ふやしてね";
+  content:"↑ボタンで お皿・はこ・かご・のりものを ふやしてね";
   color:#ccc;font-size:0.85rem;width:100%;text-align:center;padding:30px 0;
 }
 
 .container-card{
-  border-radius:14px;padding:12px;min-width:150px;
-  display:flex;flex-direction:column;align-items:center;gap:8px;
-  position:relative;transition:box-shadow .12s, transform .12s;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  position:relative;
 }
-.container-card.plate{ background:#eef7ff;border:2px solid #bcdcff; }
-.container-card.box{ background:#fbf1e2;border:2px solid #e8cfa0; }
-.container-card.basket{ background:#eefaf0;border:2px solid #b9e6c3; }
-.container-card.drag-over{ transform:scale(1.06); box-shadow:0 0 0 4px var(--pink); }
+.container-art{
+  display:flex;align-items:center;justify-content:center;
+  background-repeat:no-repeat;background-size:100% 100%;background-position:center;
+  transition:transform .12s, filter .12s;
+}
+.container-card.plate .container-art{ width:210px;height:210px;padding:46px;background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22106%22%20r%3D%2292%22%20fill%3D%22%23000%22%20opacity%3D%22.08%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22100%22%20r%3D%2294%22%20fill%3D%22%23fff%22%20stroke%3D%22%239cc8f2%22%20stroke-width%3D%225%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22100%22%20r%3D%2286%22%20fill%3D%22none%22%20stroke%3D%22%23dcebfb%22%20stroke-width%3D%222.5%22%20stroke-dasharray%3D%222%207%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22100%22%20r%3D%2278%22%20fill%3D%22%23f2f8ff%22%20stroke%3D%22%23c6defa%22%20stroke-width%3D%223%22%2F%3E%3C%2Fsvg%3E"); }
+.container-card.box .container-art{ width:210px;height:189px;padding:30px 34px;background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20180%22%3E%3Crect%20x%3D%224%22%20y%3D%226%22%20width%3D%22192%22%20height%3D%22170%22%20rx%3D%2212%22%20fill%3D%22%23000%22%20opacity%3D%22.08%22%2F%3E%3Crect%20x%3D%224%22%20y%3D%222%22%20width%3D%22192%22%20height%3D%22170%22%20rx%3D%2212%22%20fill%3D%22%23d7a566%22%20stroke%3D%22%23b07a3c%22%20stroke-width%3D%224%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2216%22%20width%3D%22164%22%20height%3D%22142%22%20rx%3D%226%22%20fill%3D%22%23f8e7c6%22%20stroke%3D%22%23c9985a%22%20stroke-width%3D%223%22%2F%3E%3Crect%20x%3D%2219%22%20y%3D%2217%22%20width%3D%22162%22%20height%3D%2214%22%20rx%3D%225%22%20fill%3D%22%23000%22%20opacity%3D%22.07%22%2F%3E%3Crect%20x%3D%2272%22%20y%3D%224%22%20width%3D%2256%22%20height%3D%2211%22%20rx%3D%223%22%20fill%3D%22%23fff3d6%22%20stroke%3D%22%23c9985a%22%20stroke-width%3D%221.5%22%2F%3E%3C%2Fsvg%3E"); }
+.container-card.basket .container-art{ width:210px;height:220px;padding:70px 50px 46px;background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20210%22%3E%3Cpath%20d%3D%22M26%20112%20C%2020%20-30%2C%20180%20-30%2C%20174%20112%22%20fill%3D%22none%22%20stroke%3D%22%234f9d62%22%20stroke-width%3D%2210%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22120%22%20r%3D%2286%22%20fill%3D%22%23000%22%20opacity%3D%22.08%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22116%22%20r%3D%2288%22%20fill%3D%22%237cc58a%22%20stroke%3D%22%234f9d62%22%20stroke-width%3D%225%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22116%22%20r%3D%2279%22%20fill%3D%22none%22%20stroke%3D%22%235fae72%22%20stroke-width%3D%229%22%20stroke-dasharray%3D%229%205%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%22116%22%20r%3D%2268%22%20fill%3D%22%23eaf7ec%22%20stroke%3D%22%234f9d62%22%20stroke-width%3D%223%22%2F%3E%3C%2Fsvg%3E"); }
+.container-card.bus .container-art{ width:260px;height:162px;padding:18px 17px 63px;background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20150%22%3E%3Crect%20x%3D%226%22%20y%3D%2212%22%20width%3D%22228%22%20height%3D%22110%22%20rx%3D%2218%22%20fill%3D%22%23000%22%20opacity%3D%22.08%22%2F%3E%3Crect%20x%3D%226%22%20y%3D%228%22%20width%3D%22228%22%20height%3D%22110%22%20rx%3D%2218%22%20fill%3D%22%23ffd24a%22%20stroke%3D%22%23d9a400%22%20stroke-width%3D%224%22%2F%3E%3Crect%20x%3D%2216%22%20y%3D%2216%22%20width%3D%22208%22%20height%3D%2276%22%20rx%3D%229%22%20fill%3D%22%23eaf6ff%22%20stroke%3D%22%23b5d9ef%22%20stroke-width%3D%223%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2298%22%20width%3D%22224%22%20height%3D%229%22%20fill%3D%22%23ff8a5c%22%2F%3E%3Ccircle%20cx%3D%22226%22%20cy%3D%22108%22%20r%3D%225%22%20fill%3D%22%23fff7b0%22%20stroke%3D%22%23d9a400%22%20stroke-width%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%2262%22%20cy%3D%22122%22%20r%3D%2219%22%20fill%3D%22%234a4a4a%22%2F%3E%3Ccircle%20cx%3D%2262%22%20cy%3D%22122%22%20r%3D%228%22%20fill%3D%22%23c9c9c9%22%2F%3E%3Ccircle%20cx%3D%22178%22%20cy%3D%22122%22%20r%3D%2219%22%20fill%3D%22%234a4a4a%22%2F%3E%3Ccircle%20cx%3D%22178%22%20cy%3D%22122%22%20r%3D%228%22%20fill%3D%22%23c9c9c9%22%2F%3E%3C%2Fsvg%3E"); }
+.container-card.train .container-art{ width:260px;height:162px;padding:24px 19px 62px;background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%20150%22%3E%3Crect%20x%3D%220%22%20y%3D%22141%22%20width%3D%22240%22%20height%3D%224%22%20rx%3D%222%22%20fill%3D%22%239aa%22%2F%3E%3Crect%20x%3D%2210%22%20y%3D%223%22%20width%3D%22220%22%20height%3D%2211%22%20rx%3D%225%22%20fill%3D%22%233d8f78%22%2F%3E%3Crect%20x%3D%226%22%20y%3D%2210%22%20width%3D%22228%22%20height%3D%22112%22%20rx%3D%2214%22%20fill%3D%22%238ed8c0%22%20stroke%3D%22%234aa58c%22%20stroke-width%3D%224%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%2222%22%20width%3D%22204%22%20height%3D%2274%22%20rx%3D%229%22%20fill%3D%22%23eefaff%22%20stroke%3D%22%23b9e3d6%22%20stroke-width%3D%223%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%22101%22%20width%3D%22224%22%20height%3D%229%22%20fill%3D%22%233f9be0%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%22104%22%20width%3D%228%22%20height%3D%228%22%20rx%3D%222%22%20fill%3D%22%23666%22%2F%3E%3Crect%20x%3D%22232%22%20y%3D%22104%22%20width%3D%228%22%20height%3D%228%22%20rx%3D%222%22%20fill%3D%22%23666%22%2F%3E%3Ccircle%20cx%3D%2242%22%20cy%3D%22128%22%20r%3D%2212%22%20fill%3D%22%234a4a4a%22%2F%3E%3Ccircle%20cx%3D%2242%22%20cy%3D%22128%22%20r%3D%225%22%20fill%3D%22%23c9c9c9%22%2F%3E%3Ccircle%20cx%3D%2282%22%20cy%3D%22128%22%20r%3D%2212%22%20fill%3D%22%234a4a4a%22%2F%3E%3Ccircle%20cx%3D%2282%22%20cy%3D%22128%22%20r%3D%225%22%20fill%3D%22%23c9c9c9%22%2F%3E%3Ccircle%20cx%3D%22158%22%20cy%3D%22128%22%20r%3D%2212%22%20fill%3D%22%234a4a4a%22%2F%3E%3Ccircle%20cx%3D%22158%22%20cy%3D%22128%22%20r%3D%225%22%20fill%3D%22%23c9c9c9%22%2F%3E%3Ccircle%20cx%3D%22198%22%20cy%3D%22128%22%20r%3D%2212%22%20fill%3D%22%234a4a4a%22%2F%3E%3Ccircle%20cx%3D%22198%22%20cy%3D%22128%22%20r%3D%225%22%20fill%3D%22%23c9c9c9%22%2F%3E%3C%2Fsvg%3E"); }
+.container-card.gondola .container-art{ width:190px;height:190px;padding:55px 38px 44px;background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%3Cline%20x1%3D%22100%22%20y1%3D%220%22%20x2%3D%22100%22%20y2%3D%2234%22%20stroke%3D%22%23888%22%20stroke-width%3D%225%22%2F%3E%3Ccircle%20cx%3D%22100%22%20cy%3D%228%22%20r%3D%227%22%20fill%3D%22%23888%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2228%22%20width%3D%22140%22%20height%3D%2226%22%20rx%3D%2213%22%20fill%3D%22%23d9566f%22%2F%3E%3Crect%20x%3D%2226%22%20y%3D%2244%22%20width%3D%22148%22%20height%3D%22132%22%20rx%3D%2218%22%20fill%3D%22%23ff8fa8%22%20stroke%3D%22%23d9566f%22%20stroke-width%3D%225%22%2F%3E%3Crect%20x%3D%2240%22%20y%3D%2258%22%20width%3D%22120%22%20height%3D%2296%22%20rx%3D%2210%22%20fill%3D%22%23eefaff%22%20stroke%3D%22%23f5b3c2%22%20stroke-width%3D%223%22%2F%3E%3Crect%20x%3D%2228%22%20y%3D%22160%22%20width%3D%22144%22%20height%3D%2214%22%20rx%3D%227%22%20fill%3D%22%23d9566f%22%20opacity%3D%22.85%22%2F%3E%3C%2Fsvg%3E"); }
+.container-card.drag-over .container-art{ transform:scale(1.05);filter:drop-shadow(0 0 6px var(--pink)) drop-shadow(0 0 3px var(--pink)); }
 
 .container-label{ font-size:0.75rem;font-weight:bold;color:var(--gray); }
 .del-btn{
@@ -88,11 +92,11 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 
 .item-display{
   display:flex;flex-wrap:wrap;gap:2px;justify-content:center;
-  min-height:74px;width:100%;align-content:flex-start;max-width:180px;
+  width:100%;height:100%;align-content:center;
 }
-.item-display span{ font-size:1.5rem;line-height:1;cursor:pointer; }
+.item-display span{ font-size:1.4rem;line-height:1;cursor:pointer; }
 .item-display span:active{ transform:scale(0.8); }
-.item-display .empty-hint{ font-size:0.68rem;color:#ccc;padding:24px 4px;text-align:center; }
+.item-display .empty-hint{ font-size:0.68rem;color:#aab;text-align:center; }
 
 .clear-all{
   margin-top:14px;display:block;margin-left:auto;margin-right:auto;
@@ -123,6 +127,7 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
   padding:14px;margin-bottom:14px;
 }
 .sentence-preview b{ color:var(--pink); }
+.sentence-preview:empty{ min-height:6.4em; }
 
 .answer-space{
   margin-top:12px;background:#fff;border:2px solid var(--pink-l);border-radius:10px;
@@ -141,6 +146,7 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
   font-family:inherit;font-size:0.9rem;padding:6px 8px;border:2px solid #eee;
   border-radius:8px;color:var(--text);width:90px;
 }
+.sctrl select{ width:126px; } /* 「えらんでね」「🍎🍇 くだもの」が切れないように */
 .num-btn{
   font-family:inherit;font-size:1.1rem;font-weight:bold;padding:6px 8px;
   border:2px solid var(--pink-l);border-radius:8px;color:var(--pink);
@@ -184,23 +190,26 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 
 <div class="wrap">
 
-  <div class="prompt-box">
-    <label>もんだいの ぶんしょう（じゆうに かいてね）</label>
-    <input id="prompt-text" type="text" placeholder="れい：りんごは ぜんぶで なんこ あるかな？" />
-  </div>
+  <div class="section-label no-capture">① ものや どうぶつを ゆびで つまんで、いれものや のりものの中へ ドラッグ！</div>
+  <div class="section-note no-capture">（入れたものを タップすると 1つ けせるよ）</div>
+  <div class="item-palette no-capture" id="item-palette"></div>
 
-  <div class="section-label no-capture">① 容器を ふやす</div>
-  <div class="add-row no-capture">
+  <div class="tab-row no-capture">
+    <button class="tab-btn active" id="tab-c" onclick="setAddTab('c')">🍽️ いれもの</button>
+    <button class="tab-btn" id="tab-v" onclick="setAddTab('v')">🚌 のりもの</button>
+  </div>
+  <div class="add-row no-capture" id="add-c">
     <button class="add-btn" onclick="addContainer('plate')">🍽️ ＋ おさら</button>
     <button class="add-btn" onclick="addContainer('box')">📦 ＋ はこ</button>
     <button class="add-btn" onclick="addContainer('basket')">🧺 ＋ かご</button>
   </div>
+  <div class="add-row no-capture" id="add-v" style="display:none">
+    <button class="add-btn" onclick="addContainer('bus')">🚌 ＋ バス</button>
+    <button class="add-btn" onclick="addContainer('train')">🚃 ＋ でんしゃ</button>
+    <button class="add-btn" onclick="addContainer('gondola')">🎡 ＋ ゴンドラ</button>
+  </div>
 
-  <div class="section-label no-capture">② ものを ゆびで つまんで、いれものの中へ ドラッグ！</div>
-  <div class="section-note no-capture">（入れたものを タップすると 1つ けせるよ）</div>
-  <div class="item-palette no-capture" id="item-palette"></div>
-
-  <div class="section-label no-capture" style="margin-top:16px">③ できあがり</div>
+  <div class="section-label no-capture" style="margin-top:16px">② できあがり</div>
   <div class="work-area empty" id="work-area"></div>
 
   <button class="clear-all no-capture" onclick="clearAll()">🗑 ぜんぶ けす</button>
@@ -222,9 +231,13 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
       <div class="sctrl">
         <label>いれもの</label>
         <select id="s-container" onchange="onContainerChange()">
+          <option value="">えらんでね</option>
           <option value="plate">おさら</option>
           <option value="box">はこ</option>
           <option value="basket">かご</option>
+          <option value="bus">バス</option>
+          <option value="train">でんしゃ</option>
+          <option value="gondola">ゴンドラ</option>
         </select>
       </div>
       <div class="sctrl">
@@ -233,11 +246,11 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
       </div>
       <div class="sctrl">
         <label>1つに いくつ</label>
-        <button class="num-btn" id="s-per" onclick="openNumPicker('s-per')">3</button>
+        <button class="num-btn" id="s-per" onclick="openNumPicker('s-per')">－</button>
       </div>
       <div class="sctrl">
         <label>いくつぶん</label>
-        <button class="num-btn" id="s-groups" onclick="openNumPicker('s-groups')">4</button>
+        <button class="num-btn" id="s-groups" onclick="openNumPicker('s-groups')">－</button>
       </div>
     </div>
   </div>
@@ -261,14 +274,40 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 </div>
 
 <script>
-const ITEMS = ['🍎','🍊','🍇','🍓','🍑','🍪','🍬','🍩','⚪','🔵'];
+const ITEMS = ['🍎','🍊','🍇','🍓','🍑','🍪','🍬','🍩','⚪','🔵','🐶','🐱','🐰','🐻','🐵'];
 const WORD_MAP = {
   '🍎':'りんご','🍊':'みかん','🍇':'ぶどう','🍓':'いちご','🍑':'もも',
-  '🍪':'クッキー','🍬':'あめ','🍩':'ドーナツ','⚪':'しろい おはじき','🔵':'あおい おはじき'
+  '🍪':'クッキー','🍬':'あめ','🍩':'ドーナツ','⚪':'しろい おはじき','🔵':'あおい おはじき',
+  '🐶':'いぬ','🐱':'ねこ','🐰':'うさぎ','🐻':'くま','🐵':'さる',
+  // まぜたときの「まとめ言葉」
+  '🍎🍇':'くだもの','🍪🍬':'おかし','⚪🔵':'おはじき','🐾':'どうぶつ','🎁':'もの'
 };
-const LABELS = { plate:'おさら', box:'はこ', basket:'かご' };
-const ICONS = { plate:'🍽️', box:'📦', basket:'🧺' };
-const COUNTERS = { plate:'まい', box:'こ', basket:'こ' };
+const LABELS = { plate:'おさら', box:'はこ', basket:'かご', bus:'バス', train:'でんしゃ', gondola:'ゴンドラ' };
+const ICONS = { plate:'🍽️', box:'📦', basket:'🧺', bus:'🚌', train:'🚃', gondola:'🎡' };
+const COUNTERS = { plate:'まい', box:'こ', basket:'こ', bus:'だい', train:'りょう', gondola:'だい' };
+const VERBS = { plate:'入っています', box:'入っています', basket:'入っています',
+                bus:'乗っています', train:'乗っています', gondola:'乗っています' };
+// 何のなかまか（まぜて入れたとき、なかまの名前でまとめる）
+const CATEGORY = {
+  '🍎':'🍎🍇','🍊':'🍎🍇','🍇':'🍎🍇','🍓':'🍎🍇','🍑':'🍎🍇',
+  '🍪':'🍪🍬','🍬':'🍪🍬','🍩':'🍪🍬',
+  '⚪':'⚪🔵','🔵':'⚪🔵',
+  '🐶':'🐾','🐱':'🐾','🐰':'🐾','🐻':'🐾','🐵':'🐾'
+};
+// 入っているものをひとことでまとめる：同じならそのまま／同じなかまならなかまの名前／ちがうなら「もの」
+function summarizeItems(items) {
+  if (items.every(it => it === items[0])) return items[0];
+  const cats = new Set(items.map(it => CATEGORY[it] || it));
+  return cats.size === 1 ? [...cats][0] : '🎁';
+}
+const PEOPLE = new Set(['🐶','🐱','🐰','🐻','🐵','🐾']); // どうぶつ（のりものに合うもの）
+// どうぶつの数え方：1ぴき・2ひき・3びき・6ぴき・8ぴき・10ぴき…
+function hikiUnit(n) {
+  const d = n % 10;
+  if (d === 3) return 'びき';
+  if ([0, 1, 6, 8].includes(d)) return 'ぴき';
+  return 'ひき';
+}
 
 let containers = []; // { id, type, items:[emoji,...] }
 let nextId = 1;
@@ -348,8 +387,19 @@ function addContainer(type) {
   renderAll();
 }
 
+// 文章もんだい（なにも入っていない状態）・ふやすボタンのタブを、さいしょの状態にもどす
+function resetSentence() {
+  document.getElementById('s-container').value = '';
+  document.getElementById('s-item').value = '';
+  document.getElementById('s-per').textContent = '－';
+  document.getElementById('s-groups').textContent = '－';
+  setAddTab('c'); // ふやすボタンも「いれもの」のタブにもどす
+  closeNumPicker();
+}
+
 function removeContainer(id) {
   containers = containers.filter(c => c.id !== id);
+  if (containers.length === 0) resetSentence();
   renderAll();
 }
 
@@ -362,6 +412,7 @@ function removeItemAt(containerId, idx) {
 
 function clearAll() {
   containers = [];
+  resetSentence();
   renderAll();
 }
 
@@ -381,10 +432,8 @@ function renderAll() {
     del.onclick = () => removeContainer(c.id);
     card.appendChild(del);
 
-    const label = document.createElement('div');
-    label.className = 'container-label';
-    label.textContent = ICONS[c.type] + ' ' + LABELS[c.type];
-    card.appendChild(label);
+    const art = document.createElement('div');
+    art.className = 'container-art';
 
     const disp = document.createElement('div');
     disp.className = 'item-display';
@@ -401,7 +450,13 @@ function renderAll() {
         disp.appendChild(s);
       });
     }
-    card.appendChild(disp);
+    art.appendChild(disp);
+    card.appendChild(art);
+
+    const label = document.createElement('div');
+    label.className = 'container-label';
+    label.textContent = ICONS[c.type] + ' ' + LABELS[c.type];
+    card.appendChild(label);
 
     area.appendChild(card);
   });
@@ -414,8 +469,8 @@ function renderAll() {
 // ============================================================
 function buildItemSelect() {
   const sel = document.getElementById('s-item');
-  sel.innerHTML = '';
-  ITEMS.forEach(it => {
+  sel.innerHTML = '<option value="">えらんでね</option>';
+  ITEMS.concat(['🍎🍇','🍪🍬','⚪🔵','🐾','🎁']).forEach(it => {
     const opt = document.createElement('option');
     opt.value = it;
     opt.textContent = it + ' ' + WORD_MAP[it];
@@ -424,8 +479,19 @@ function buildItemSelect() {
 }
 
 // ③のエリアに実際に置いた容器・中身を、文章の数字に反映する
+const VEHICLES = new Set(['bus','train','gondola']);
+// のりものには人、いれものにはものが合うので、中身の選択をそれに合わせる
+function fitItemToType() {
+  const type = document.getElementById('s-container').value;
+  const itemSel = document.getElementById('s-item');
+  if (!itemSel.value) return;
+  const isVeh = VEHICLES.has(type);
+  if (isVeh && !PEOPLE.has(itemSel.value)) itemSel.value = '🐾';
+  if (!isVeh && PEOPLE.has(itemSel.value)) itemSel.value = '🍎';
+}
+
 function syncSentenceFromWork(autoSwitchType) {
-  if (containers.length === 0) { updateSentence(); return; }
+  if (containers.length === 0) { fitItemToType(); updateSentence(); return; }
   const sel = document.getElementById('s-container');
   let same = containers.filter(c => c.type === sel.value);
   if (same.length === 0 && autoSwitchType) {
@@ -434,34 +500,56 @@ function syncSentenceFromWork(autoSwitchType) {
   }
   if (same.length > 0) {
     document.getElementById('s-groups').textContent = same.length;
-    // 全部の容器が「同じもの・同じ数」のときだけ、なかみと1つぶんの数も合わせる
+    // 置いてあるものから、なかみ（なかま分けした名前）と1つぶんの数を合わせる
     const first = same[0];
-    const uniform = first.items.length > 0 &&
-      first.items.every(it => it === first.items[0]) &&
-      same.every(c => c.items.length === first.items.length && c.items.every(it => it === first.items[0]));
-    if (uniform) {
-      document.getElementById('s-item').value = first.items[0];
-      document.getElementById('s-per').textContent = first.items.length;
+    const allItems = same.flatMap(c => c.items);
+    const sameCount = first.items.length > 0 && same.every(c => c.items.length === first.items.length);
+    if (allItems.length > 0) {
+      document.getElementById('s-item').value = summarizeItems(allItems);
+      // 1つぶんの数は、どの入れものも同じ数のときだけ合わせる
+      if (sameCount) document.getElementById('s-per').textContent = first.items.length;
+    } else {
+      fitItemToType();
     }
+  } else {
+    fitItemToType();
   }
   updateSentence();
 }
 
+function setAddTab(t) {
+  document.getElementById('add-c').style.display = t === 'c' ? 'flex' : 'none';
+  document.getElementById('add-v').style.display = t === 'v' ? 'flex' : 'none';
+  document.getElementById('tab-c').classList.toggle('active', t === 'c');
+  document.getElementById('tab-v').classList.toggle('active', t === 'v');
+}
+
 function onContainerChange() {
+  fitItemToType();
   syncSentenceFromWork(false);
 }
 
 function updateSentence() {
-  const containerWord = LABELS[document.getElementById('s-container').value];
+  const type = document.getElementById('s-container').value;
+  const containerWord = LABELS[type];
+  const verb = VERBS[type];
   const itemEmoji = document.getElementById('s-item').value;
   const itemWord = WORD_MAP[itemEmoji];
-  const per = document.getElementById('s-per').textContent || 0;
-  const groups = document.getElementById('s-groups').textContent || 0;
-  const counter = COUNTERS[document.getElementById('s-container').value];
+  const per = document.getElementById('s-per').textContent;
+  const groups = document.getElementById('s-groups').textContent;
+  // いれもの・なかみ・かずが ぜんぶ そろうまで、ぶんしょうは 何も出さない
+  if (!type || !itemEmoji || !/^\d+$/.test(per) || !/^\d+$/.test(groups)) {
+    document.getElementById('sentence-preview').innerHTML = '';
+    return;
+  }
+  const counter = COUNTERS[type];
+  const isPerson = PEOPLE.has(itemEmoji);
+  const unit = isPerson ? hikiUnit(parseInt(per, 10) || 0) : 'こ';
+  const ask = isPerson ? 'なんびき いますか' : 'なんこ ありますか';
 
-  const html = `ひとつの<b>${containerWord}</b>に、<b>${itemWord}</b>が<b>${per}</b>こずつ 入っています。<br>
+  const html = `ひとつの<b>${containerWord}</b>に、<b>${itemWord}</b>が<b>${per}</b>${unit}ずつ ${verb}。<br>
     <b>${containerWord}</b>は<b>${groups}</b>${counter} あります。<br>
-    ${itemWord}は ぜんぶで なんこ ありますか。`;
+    ${itemWord}は ぜんぶで ${ask}。`;
   document.getElementById('sentence-preview').innerHTML = html;
 }
 
