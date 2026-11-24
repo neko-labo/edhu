@@ -128,6 +128,11 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 }
 .sentence-preview b{ color:var(--pink); }
 .sentence-preview:empty{ min-height:6.4em; }
+.mismatch-msg{
+  margin-top:10px;padding:10px 14px;background:#fff0e0;border:2px solid #ffb066;
+  border-radius:12px;color:#c4660a;font-size:0.9rem;font-weight:bold;line-height:1.8;
+}
+.mismatch-msg:empty{ display:none; }
 
 .answer-space{
   margin-top:12px;background:#fff;border:2px solid var(--pink-l);border-radius:10px;
@@ -211,6 +216,7 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
 
   <div class="section-label no-capture" style="margin-top:16px">② できあがり</div>
   <div class="work-area empty" id="work-area"></div>
+  <div class="mismatch-msg no-capture" id="mismatch-msg"></div>
 
   <button class="clear-all no-capture" onclick="clearAll()">🗑 ぜんぶ けす</button>
 
@@ -255,7 +261,7 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
     </div>
   </div>
 
-  <button class="shot-btn no-capture" onclick="takeScreenshot()">📸 スクリーンショットを ほぞん</button>
+  <button class="shot-btn no-capture" onclick="finishProblem()">✅ できた！</button>
 
   <!-- 数字えらびポップアップ -->
   <div class="num-popup no-capture" id="num-popup">
@@ -267,8 +273,8 @@ header h1{color:#fff;font-size:1.05rem;margin:0;flex:1}
   </div>
 
   <div class="hint-note no-capture">
-    「📸 スクリーンショットを ほぞん」を おすと、<br>
-    もんだいの がぞうが ほぞんされるよ。<br>
+    「✅ できた！」を おすと、<br>
+    かずが あっているか しらべて、もんだいの がぞうが ほぞんされるよ。<br>
   </div>
 
 </div>
@@ -393,6 +399,7 @@ function resetSentence() {
   document.getElementById('s-item').value = '';
   document.getElementById('s-per').textContent = '－';
   document.getElementById('s-groups').textContent = '－';
+  checkArmed = false;
   setAddTab('c'); // ふやすボタンも「いれもの」のタブにもどす
   closeNumPicker();
 }
@@ -529,7 +536,67 @@ function onContainerChange() {
   syncSentenceFromWork(false);
 }
 
+// できあがりの絵と、ぶんしょうの数が合っているかしらべて、ちがうときはメッセージを出す
+let checkArmed = false; // 「できた！」をいちど おしたあとだけ、メッセージを出しつづける
+function computeMismatch() {
+  const msgs = [];
+  const type = document.getElementById('s-container').value;
+  if (containers.length > 0 && type) {
+    const label = LABELS[type];
+    const same = containers.filter(c => c.type === type);
+    if (same.length === 0) {
+      msgs.push('できあがりに ' + label + 'が ないよ。');
+    } else {
+      const counts = same.map(c => c.items.length);
+      if (counts.some(n => n !== counts[0])) {
+        msgs.push(label + 'に ' + VERBS[type].replace('います', 'いる') + ' かずが ちがうよ。おなじ かずに しよう！');
+      } else {
+        const per = parseInt(document.getElementById('s-per').textContent, 10);
+        const groups = parseInt(document.getElementById('s-groups').textContent, 10);
+        const itemVal = document.getElementById('s-item').value;
+        const all = same.flatMap(c => c.items);
+        if (Number.isInteger(groups) && groups !== same.length)
+          msgs.push('「いくつぶん」が、できあがりの ' + label + 'の かずと ちがうよ。');
+        if (counts[0] > 0 && Number.isInteger(per) && per !== counts[0])
+          msgs.push('「1つに いくつ」が、できあがりの かずと ちがうよ。');
+        if (all.length > 0 && itemVal && itemVal !== summarizeItems(all))
+          msgs.push('「なかみ」が、できあがりの ものと ちがうよ。');
+      }
+    }
+  }
+  return msgs;
+}
+
+function showMismatch(msgs) {
+  document.getElementById('mismatch-msg').innerHTML = msgs.map(m => '⚠ ' + m).join('<br>');
+}
+
+function renderMismatch() {
+  if (!checkArmed) { showMismatch([]); return; }
+  showMismatch(computeMismatch());
+}
+
+// 「できた！」：数が合っていればほぞん、合っていなければメッセージを出す
+function finishProblem() {
+  checkArmed = true;
+  updateSentence();                       // ぶんしょうを さいしんにする
+  const msgs = computeMismatch();
+  // 数のちがいのメッセージがあるときは、そちらを先に見せる（二重に出さない）
+  if (msgs.length === 0 && !document.getElementById('sentence-preview').innerHTML.trim()) {
+    msgs.push('もんだいが まだ できていないよ。ものを いれてみよう！');
+  }
+  if (msgs.length > 0) {
+    showMismatch(msgs);
+    document.getElementById('mismatch-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  checkArmed = false;
+  showMismatch([]);
+  takeScreenshot();
+}
+
 function updateSentence() {
+  renderMismatch();
   const type = document.getElementById('s-container').value;
   const containerWord = LABELS[type];
   const verb = VERBS[type];
